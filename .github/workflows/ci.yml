@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Check shell scripts
+        run: bash -n release.sh e2e/run.sh
+      - name: Test, check syntax, and pack
+        run: |
+          mkdir -p dist
+          npm pack --pack-destination dist
+      - name: Verify production package contents
+        run: |
+          tar -tzf dist/*.tgz > dist/package-files.txt
+          if grep -Eq '^package/(e2e|tests|node_modules|dist|\.github)/' dist/package-files.txt; then
+            echo 'Development files leaked into the production package' >&2
+            exit 1
+          fi
+          grep -Fx 'package/LICENSE' dist/package-files.txt
+          grep -Fx 'package/README.zh-CN.md' dist/package-files.txt

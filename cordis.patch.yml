@@ -1,0 +1,5 @@
+# The Designer bundle: one host row owning the design documents, the served
+# preview, and the model-facing design tools.
+- insert:
+    - id: designer
+      name: 'deepseek-harness-design'
