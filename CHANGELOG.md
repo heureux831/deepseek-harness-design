@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1 — Public distribution and getting started
+
+- Provide GitHub Release tarballs, build identity and checksum files, with download-first installation instructions in both languages.
+- Add troubleshooting, example prompts and standalone coffee-page demos with reproducible screenshots of the real Harness UI.
+- Include a Chinese project introduction suitable for Zhihu.
+- Host, browser, storage schema and runtime behavior are unchanged from 0.6.0.
+
 ## 0.6.0 — Compact controls and descriptive alternative names
 
 - Replace growing alternative and revision button lists with bounded dropdowns. Group viewport icons and use quieter, accessible selection / comparison controls.

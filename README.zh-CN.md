@@ -6,7 +6,35 @@ DeepSeek Harness 的社区插件，与 DeepSeek 官方无隶属关系。
 
 在对话中让模型生成前端界面，右侧 **Design** 标签页实时预览。点选元素后，可以直接说「把这个按钮改成描边样式」。支持多个方案、修订回看和并排对比。
 
-## 安装
+[下载安装包](https://github.com/heureux831/deepseek-harness-design/releases/latest) · [示例页面](https://github.com/heureux831/deepseek-harness-design/tree/main/examples) · [项目介绍](https://github.com/heureux831/deepseek-harness-design/blob/main/docs/articles/zhihu.md)
+
+![Design 面板中的方案并排对比](https://raw.githubusercontent.com/heureux831/deepseek-harness-design/v0.6.1/docs/media/design-compare.png)
+
+截图使用仓库中的原创咖啡店示例 HTML，展示真实 Harness 面板；不包含用户会话或模型凭据。
+
+## 下载安装（推荐）
+
+目前验证环境为 **DeepSeek Harness Desktop 0.2.0-rc.2** 的 Web profile，Desktop profile 安装也已验证。其他 Harness 版本尚未验证。
+
+1. 从 [GitHub Release v0.6.1](https://github.com/heureux831/deepseek-harness-design/releases/tag/v0.6.1) 下载 `deepseek-harness-design-0.6.1.tgz`，无需克隆源码或运行测试。
+2. 在终端切换到下载目录，按使用的 profile 安装：
+
+```sh
+# 已安装 Harness Desktop，安装到其 desktop profile
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile desktop add ./deepseek-harness-design-0.6.1.tgz
+
+# 如果使用 Harness Web，改用 web profile
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add ./deepseek-harness-design-0.6.1.tgz
+```
+
+需要可用的 Node.js 和 pnpm；推荐 Node.js 24。如果终端缺少 pnpm，可先运行 `npm install -g pnpm@11`。已有 `dsh` 命令时，可将 `npx @deepseek-ai/dsh@0.2.0-rc.2` 替换为 `dsh`。这里固定的是已验证的 Harness CLI 版本。
+
+3. 完全退出并重新打开 Harness。Web 用户重新启动 `npx @deepseek-ai/dsh@0.2.0-rc.2 web`。
+4. 展开右侧栏，在 `+` 中选择 **Design**，按面板内的指南创建第一份原型。
+
+发布附件还包含 `BUILD.json` 和 `SHA256SUMS`，用于核验包的来源及文件内容。插件使用 MIT 许可；目前通过 GitHub Release 分发，尚未发布到 npm。
+
+## 从源码构建
 
 需要提供 `tools`、`fs`、`webServer`、`systemPrompt`、`storageDomain`、`sessions` 和 `sessionPersistence` 服务的 Harness Web / Desktop profile。当前版本在 DeepSeek Harness Desktop **0.2.0-rc.2** 的 Web profile 上验证。
 
@@ -19,16 +47,16 @@ npm ci
 ./release.sh
 ```
 
-首次构建生成 `dist/r1/deepseek-harness-design-0.6.0.tgz`，后续使用递增的 `rN` 目录。安装脚本输出的本地发布包：
+首次构建生成 `dist/r1/deepseek-harness-design-0.6.1.tgz`，后续使用递增的 `rN` 目录。安装脚本输出的本地发布包：
 
 ```sh
-dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.6.0.tgz
+dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.6.1.tgz
 # Desktop 使用 --profile desktop
 ```
 
 从旧的本地包 `dsh-design` 或 `@local/dsh-designer-rN` 升级时，先用 `dsh plugin --profile <profile> remove <旧包名>` 移除旧 bundle，再安装本包；同一个 profile 只能装一个 Designer。修改 Host 后需重新启动 Harness 才会使用新的模块。
 
-当前通过本地 tarball 安装，尚未发布到 npm。正式发布后才可使用 `dsh plugin --profile web add deepseek-harness-design`。
+源码构建适合开发和修改插件。一般使用者直接下载 Release 中的 tarball 即可。
 
 ## 使用
 
@@ -44,6 +72,25 @@ dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.6.0.tgz
 历史修订用于只读预览。让模型修改历史版本时，明确告诉它方案名与修订号，先调用 `design_read` 取回该版，再用 `design_apply` 追加新修订。
 
 单栏和对比模式都使用真实的 390 / 834 / 1280 px 视口；侧栏较窄时可横向滚动。首次加载失败会显示重试提示，连接恢复后自动加载稿件；已有预览在连接失败时保留。修订加载也会自动重试，「刷新」可重新发起稿件加载。
+
+## 可直接尝试的提示词
+
+> 帮我做一个咖啡店首页，方案名叫「暖白咖啡首页」。暖白底色、橄榄绿按钮，包含品牌介绍、今日推荐和购买入口。请用 Design 预览。
+
+> 保留「暖白咖啡首页」，再做一个叫「深色编辑风」的独立方案，我想并排比较。
+
+> 我已经点选了按钮，把它改成描边样式，文字改为「了解今日咖啡」，其余布局保持原样。
+
+仓库的 [examples/](https://github.com/heureux831/deepseek-harness-design/tree/main/examples) 提供两份可本地打开的示例 HTML。模型调用 `design_apply` 才会将稿件保存到 Design 面板。
+
+## 常见问题
+
+- **找不到 `dsh`？** 使用上面的 `npx` 命令；运行这些命令需要安装 Node.js 和 pnpm。
+- **装完没有 Design？** 确认装到了正在使用的 profile，重启 Harness 后在右侧栏的 `+` 中添加 Design 标签页。
+- **预览里的按钮点不动？** 关闭顶部「点选」开关，再操作原型按钮。
+- **模型只回复代码，画布没刷新？** 明确要求「用 `design_apply` 保存到 Design 面板」，并确认当前 Agent 的工具集中有这个工具。
+- **保存成功但没有 HTML 文件？** 查看工具回执中的 `persisted` / `exported`；只读会话可以保存草稿，但不会向工作区导出 HTML。
+- **升级旧本地包？** 按上面的说明移除旧包名，避免同一 profile 同时挂载两个 Designer；切勿删除 Harness 存储来处理升级。
 
 ## 保存与恢复
 
@@ -99,7 +146,7 @@ npm run check
 ./release.sh
 ```
 
-`release.sh` 执行测试和语法检查，固定待打包文件后生成 `dist/rN` 快照及标准 `deepseek-harness-design-0.6.0.tgz` 发布包。它拒绝覆盖已有快照，也拒绝再次构建当前输出目录内已完成的同版本发布。重复安装应复用原 tarball；内容改动后先同步提高 `package.json` 和 `package-lock.json` 的版本号。可用 `DSG_RELEASE_DIR` 指定其他输出目录；跨目录、跨机器的版本唯一性仍需遵守发布流程。`npm pack` 的 `prepack` 同样执行 Host、React、发布回归和语法检查，正式分发请使用 `./release.sh`。
+`release.sh` 执行测试和语法检查，固定待打包文件后生成 `dist/rN` 快照及标准 `deepseek-harness-design-0.6.1.tgz` 发布包。它拒绝覆盖已有快照，也拒绝再次构建当前输出目录内已完成的同版本发布。重复安装应复用原 tarball；内容改动后先同步提高 `package.json` 和 `package-lock.json` 的版本号。可用 `DSG_RELEASE_DIR` 指定其他输出目录；跨目录、跨机器的版本唯一性仍需遵守发布流程。`npm pack` 的 `prepack` 同样执行 Host、React、发布回归和语法检查，正式分发请使用 `./release.sh`。
 
 每份完整快照还包含包外的 `BUILD.json`，记录 tarball 的 SHA-256、包内文件哈希、源码提交和工作区是否有改动。核对版本时可据此比对源码、tarball 和已安装文件。进程启动晚于安装只能作为辅助线索，不能单独证明正在使用哪个 profile、包路径或浏览器 bundle。
 

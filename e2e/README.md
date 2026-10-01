@@ -7,7 +7,7 @@ Host 回归和真实 React / JSDOM 生命周期回归用 `npm test` 执行，包
 先运行 `./release.sh`，把生成的 tarball 传给：
 
 ```sh
-./e2e/run.sh /absolute/path/deepseek-harness-design-0.6.0.tgz
+./e2e/run.sh /absolute/path/deepseek-harness-design-0.6.1.tgz
 ```
 
 脚本需要 macOS 上的 `/Applications/DeepSeek Harness.app` 和 `/Applications/Google Chrome.app`。通过 `DSG_HARNESS_APP` 可调整 Harness app 路径；`DSG_E2E_PORT` 和 `DSG_E2E_CDP` 可调整默认的 19401 / 19501 端口。
@@ -23,6 +23,14 @@ dsh --profile web --patch ./test-seed.patch.yml --no-open --port 19401
 `e2e.cjs` 与 `cdp.cjs` 是 CommonJS，可直接在本包的 `type: module` 下运行，无需复制到包外。
 
 覆盖应用启动、面板挂载、opaque-origin 沙箱和响应 CSP、轮询刷新、方案/历史修订切换、两栏对比、单栏和对比的实际视口宽度、单方案历史对比、点选回传、关开开关、在途点击拒收和重新绑定，以及中文重命名保留原型状态与点选、32 方案和 41 修订在 320px 侧栏的单栏 / 对比布局。
+
+生成公开展示截图时，可使用仓库内的原创示例 HTML：
+
+```sh
+DSG_E2E_SHOWCASE=only ./e2e/run.sh /absolute/path/deepseek-harness-design-0.6.1.tgz
+```
+
+`only` 只运行展示流程；`DSG_E2E_SHOWCASE=1` 在完整回归后追加展示。截图仍来自真实 Harness 面板，使用隔离 profile，不调用模型或携带个人数据。示例及截图不包含在 npm tarball 中。
 
 `POST /designer/dev/seed` 仅由 `test-seed/index.js` 注册。正式 tarball 没有测试插件，也不会注册这条路由。
 

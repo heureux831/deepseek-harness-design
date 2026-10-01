@@ -132,6 +132,43 @@ async function main() {
   const sid = await ev("(function(){var m=document.body.innerHTML.match(/session-[0-9a-f-]{36}/); return m?m[0]:null})()")
   check('03 取到会话 ID', typeof sid === 'string' && sid.startsWith('session-'), sid)
 
+  // Optional synthetic showcase: real Harness UI, original static example HTML.
+  async function showcase() {
+    const path = require('node:path')
+    const warm = fs.readFileSync(path.join(__dirname, '../examples/coffee-warm.html'), 'utf8')
+    const dark = fs.readFileSync(path.join(__dirname, '../examples/coffee-dark.html'), 'utf8')
+    await clickBy("b=>b.textContent.trim()==='对比中'")
+    await ev("document.querySelector('.dsg-root').style.width=''")
+    await send('Emulation.setDeviceMetricsOverride', {width:await ev('window.innerWidth'),height:1000,deviceScaleFactor:1,mobile:false})
+    const gallery = JSON.stringify({session:sid,branches:[
+      {name:'coffee-warm',title:'暖白咖啡首页',revisions:[warm.replace('看看今日咖啡 ↗','开始今天 ↗'),warm]},
+      {name:'coffee-dark',title:'深色编辑风',revisions:[dark]}
+    ]})
+    const gallerySeed = await ev("fetch('/designer/dev/seed',{method:'POST',headers:{'content-type':'application/json'},body:"+JSON.stringify(gallery)+"}).then(r=>r.json())")
+    check('25a 演示页面加载成功', gallerySeed?.ok === true, JSON.stringify(gallerySeed?.message || gallerySeed?.__error || gallerySeed?.ok))
+    await wait(1800)
+    await pick('方案', 'coffee-warm')
+    await clickBy("b=>b.getAttribute('aria-label')==='手机'")
+    await wait(2000)
+    await ev("document.querySelector('.dsg-root').style.width='450px'")
+    await shot('40-showcase-single', '.dsg-root')
+    await frameEv("document.querySelector('.primary').click()")
+    await wait(1200)
+    check('25 展示稿点选按钮能回传源码', (await ev("document.querySelector('.dsg-sel')?.innerText"))?.includes('看看今日咖啡'))
+    await shot('41-showcase-selection', '.dsg-root')
+    await ev("document.querySelector('.dsg-root').style.width=''")
+    await clickBy("b=>b.textContent.trim()==='对比'")
+    await wait(1200)
+    await pick('方案', 'coffee-dark', 1)
+    await wait(1800)
+    await shot('42-showcase-compare', '.dsg-root')
+  }
+
+
+  if (process.env.DSG_E2E_SHOWCASE === 'only') {
+    await showcase(); cdp.ws.close(); finish(); return
+  }
+
   // Seed through the host dev route so branches and revisions really exist.
   const payload = JSON.stringify({
     session: sid,
@@ -356,6 +393,8 @@ async function main() {
   const narrowCompare = await ev("document.querySelector('.dsg-device').parentElement.getBoundingClientRect().height < 60 && [...document.querySelectorAll('.dsg-sidehead')].every(h=>h.scrollWidth<=h.clientWidth)")
   check('24 窄侧栏对比模式也保持紧凑', narrowCompare === true)
   await shot('36-compact-compare', '.dsg-root')
+
+  if (process.env.DSG_E2E_SHOWCASE === '1') await showcase()
 
   const fatal = consoleErrors.filter((e) => e.includes('viewingOld') || e.includes("crashed in 'sidebar.right.pane.tab'")
     || e.includes('DesignBody'))

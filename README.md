@@ -6,6 +6,8 @@ A community plugin for **DeepSeek Harness** that turns a conversation into an in
 
 This project is independently maintained and is not affiliated with DeepSeek.
 
+[Download release](https://github.com/heureux831/deepseek-harness-design/releases/latest) · [Examples](https://github.com/heureux831/deepseek-harness-design/tree/main/examples) · [Chinese introduction](https://github.com/heureux831/deepseek-harness-design/blob/main/docs/articles/zhihu.md)
+
 ## Features
 
 - Live preview with phone, tablet, and desktop viewport widths.
@@ -22,9 +24,31 @@ This project is independently maintained and is not affiliated with DeepSeek.
 
 The plugin has been tested with **DeepSeek Harness Desktop 0.2.0-rc.2**, using its Web profile. Compatibility with other Harness versions has not been verified.
 
+## Download and install (recommended)
+
+![Alternative comparison in the Design sidebar](https://raw.githubusercontent.com/heureux831/deepseek-harness-design/v0.6.1/docs/media/design-compare.png)
+
+Screenshots show the real Harness UI with original example HTML from this repository.
+
+Download `deepseek-harness-design-0.6.1.tgz` from [GitHub Release v0.6.1](https://github.com/heureux831/deepseek-harness-design/releases/tag/v0.6.1). From the download directory:
+
+```sh
+# Harness Desktop
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile desktop add ./deepseek-harness-design-0.6.1.tgz
+
+# Harness Web
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add ./deepseek-harness-design-0.6.1.tgz
+```
+
+Node.js and pnpm must be available; Node.js 24 is recommended. If pnpm is missing, install it with `npm install -g pnpm@11`. An existing `dsh` CLI can replace the `npx` prefix. Commands pin the tested Harness CLI version.
+
+Fully quit and reopen Harness after installation. Web users restart `npx @deepseek-ai/dsh@0.2.0-rc.2 web`. Open the right sidebar, choose **Design** from `+`, and follow the welcome guide.
+
+The release also provides `BUILD.json` and `SHA256SUMS`. The package is **not published to npm yet**; GitHub Release tarballs are the supported distribution.
+
 ## Install from source
 
-The package is **not published to npm yet**. Build a tarball from this repository:
+For development, build a tarball from this repository:
 
 ```sh
 git clone https://github.com/heureux831/deepseek-harness-design.git
@@ -33,10 +57,10 @@ npm ci
 ./release.sh
 ```
 
-The first build produces `dist/r1/deepseek-harness-design-0.6.0.tgz`; later builds use the next `rN` directory. Install the printed tarball path:
+The first build produces `dist/r1/deepseek-harness-design-0.6.1.tgz`; later builds use the next `rN` directory. Install the printed tarball path:
 
 ```sh
-dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.6.0.tgz
+dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.6.1.tgz
 # For the Desktop profile, use --profile desktop.
 ```
 
@@ -67,6 +91,16 @@ Phone, tablet, and desktop use actual 390 / 834 / 1280 px viewport widths in eit
 The selection receipt means the Host recorded the click. It does **not** mean the model has already read or acted on it. Selection is scoped to the current session, expires after ten minutes, and is marked delivered only when its prompt enters that session's context snapshot.
 
 Reopening Design restores the session's inspect switch and retained selection receipt. Changing the displayed alternative, revision, or comparison mode clears the binding; a successful edit to the selected alternative also clears it. Inspect toggles preserve prototype state. A failed switch or clear shows its synchronization state and retries automatically. Stale clicks are rejected, and a historical click includes its revision number. An unnamed edit targets the selected alternative, otherwise the most recently edited one.
+
+## Examples and troubleshooting
+
+Try asking for a “Warm coffee homepage”, then a separate “Dark editorial” alternative for comparison. Select a button and ask the model to give it an outlined style. [examples/](https://github.com/heureux831/deepseek-harness-design/tree/main/examples) contains standalone HTML demos; a model must call `design_apply` to store a draft in Design.
+
+- No Design tab: check the installed profile, restart Harness, then add Design from the sidebar's `+` cards.
+- Prototype controls do not respond: turn element selection off.
+- Model returns code without a preview: ask it to save with `design_apply`, and ensure its tool set includes that tool.
+- Saved draft but no exported file: inspect `persisted` and `exported` separately; read-only sessions cannot export workspace HTML.
+- Upgrading an old local package: remove its exact package name first; keep Harness storage to retain drafts.
 
 ## Storage and recovery
 
