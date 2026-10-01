@@ -19,10 +19,10 @@ npm ci
 ./release.sh
 ```
 
-首次构建生成 `dist/r1/deepseek-harness-design-0.5.3.tgz`，后续使用递增的 `rN` 目录。安装脚本输出的本地发布包：
+首次构建生成 `dist/r1/deepseek-harness-design-0.5.4.tgz`，后续使用递增的 `rN` 目录。安装脚本输出的本地发布包：
 
 ```sh
-dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.3.tgz
+dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.4.tgz
 # Desktop 使用 --profile desktop
 ```
 
@@ -97,7 +97,9 @@ npm run check
 ./release.sh
 ```
 
-`release.sh` 生成新的 `dist/rN` 目录和标准 `deepseek-harness-design-0.5.3.tgz` 发布包，执行测试、安装运行依赖，并拒绝覆盖已有快照。可用 `DSG_RELEASE_DIR` 指定其他输出目录。包名保持 `deepseek-harness-design`，版本由 `package.json` 管理。`npm pack` 的 `prepack` 同样执行 Host、React 测试和语法检查。
+`release.sh` 执行测试和语法检查，固定待打包文件后生成 `dist/rN` 快照及标准 `deepseek-harness-design-0.5.4.tgz` 发布包。它拒绝覆盖已有快照，也拒绝再次构建当前输出目录内已完成的同版本发布。重复安装应复用原 tarball；内容改动后先同步提高 `package.json` 和 `package-lock.json` 的版本号。可用 `DSG_RELEASE_DIR` 指定其他输出目录；跨目录、跨机器的版本唯一性仍需遵守发布流程。`npm pack` 的 `prepack` 同样执行 Host、React、发布回归和语法检查，正式分发请使用 `./release.sh`。
+
+每份完整快照还包含包外的 `BUILD.json`，记录 tarball 的 SHA-256、包内文件哈希、源码提交和工作区是否有改动。核对版本时可据此比对源码、tarball 和已安装文件。进程启动晚于安装只能作为辅助线索，不能单独证明正在使用哪个 profile、包路径或浏览器 bundle。
 
 发布包包含 Host、浏览器入口、locale、bundle patch、README 和 MIT 许可；不会包含测试种子插件。公开发布前，可用生成的 tarball 安装到独立 profile 验证，再通过 `npm publish <tarball>` 发布。
 

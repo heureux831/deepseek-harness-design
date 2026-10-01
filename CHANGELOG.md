@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.4 — Release identity
+
+- Give the finalized 0.5.3 r6 implementation a distinct release version. Host and browser behavior are unchanged from r6; the earlier local r5 build shared 0.5.3 but lacked the historical-click revision check.
+- Refuse another completed build of the same package version within the selected release output directory. Reuse the existing artifact or bump the version.
+- Serialize release builds, remove failed staging directories, and verify lockfile versions.
+- Verify stable release inputs and pack the frozen snapshot, so tarball files match the checked source and install snapshot.
+- Add `BUILD.json` beside the tarball with its SHA-256, packaged file hashes, source commit, and dirty state. It is excluded from the npm package.
+- Exercise the release script in CI and add regressions for version reuse, changing inputs, concurrency, failed installs, and package contents.
+
 ## 0.5.3 — State transitions and boundary handling
 
 - Retry failed document and revision loads, check HTTP status, and distinguish loading errors from an empty session.

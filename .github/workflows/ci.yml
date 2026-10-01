@@ -24,13 +24,11 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Check shell scripts
         run: bash -n release.sh e2e/run.sh
-      - name: Test, check syntax, and pack
-        run: |
-          mkdir -p dist
-          npm pack --pack-destination dist
+      - name: Test, check syntax, and build release
+        run: ./release.sh
       - name: Verify production package contents
         run: |
-          tar -tzf dist/*.tgz > dist/package-files.txt
+          tar -tzf dist/r1/*.tgz > dist/package-files.txt
           if grep -Eq '^package/(e2e|tests|node_modules|dist|\.github)/' dist/package-files.txt; then
             echo 'Development files leaked into the production package' >&2
             exit 1

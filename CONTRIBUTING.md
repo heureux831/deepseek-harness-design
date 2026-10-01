@@ -22,6 +22,7 @@ npm run check
 | `cordis.patch.yml` | Host plugin registration in the Harness bundle. |
 | `locale/` | Plugin Manager descriptions. |
 | `tests/` | Host service tests and real React lifecycle tests in JSDOM, with controlled network responses. |
+| `scripts/release.mjs` | Release locking, version guard, frozen packaging, and build manifest. |
 | `e2e/` | Browser tests, test-only seed plugin, and native Harness storage / sandbox tests. |
 
 ## Make a change
@@ -43,11 +44,13 @@ Do not commit generated HTML, Harness profiles, screenshots, logs, API keys, lau
 ./release.sh
 ```
 
-This creates a new `dist/rN` snapshot and a standard npm tarball. Install that tarball into an isolated Harness profile and run the integration checks before distributing it.
+This creates a new `dist/rN` snapshot, a standard npm tarball, and an external `BUILD.json` with artifact and file hashes. A completed version cannot be built again in the same output directory, even when the requested `rN` differs. Reuse a verified tarball for repeated installs. Changed distributable bytes require a new version, including when building on another machine or with another `DSG_RELEASE_DIR`.
+
+Commit the final source before building a release so `BUILD.json` identifies a clean source commit. Tests run before packaging, release inputs are checked for changes, and npm packs the frozen snapshot. Failed builds leave no completed snapshot. A concurrent build owns `.release-lock`; after a crash, remove that lock only after verifying no builder is running. Install the tarball into an isolated Harness profile and run the integration checks before distributing it.
 
 For a release, update `package.json`, `package-lock.json`, the changelog, and versioned examples in both README files and E2E documentation. Keep `deepseek-harness-design` as the package name; keep the `designer` storage domain and `.dsh-design` export path stable.
 
-The GitHub CI runs Host and React tests, syntax checks, and packaging on Node.js 22 and 24. It does not run macOS browser tests or publish to npm. The maintainer may publish a verified tarball with `npm publish <tarball>` after confirming registry ownership and the release version. Never put registry credentials in the repository.
+The GitHub CI runs Host, React, and release tests, syntax checks, and the release script on Node.js 22 and 24. It does not run macOS browser tests or publish to npm. The maintainer may publish a verified tarball with `npm publish <tarball>` after confirming registry ownership and the release version. Never put registry credentials in the repository.
 
 ## License
 

@@ -33,10 +33,10 @@ npm ci
 ./release.sh
 ```
 
-The first build produces `dist/r1/deepseek-harness-design-0.5.3.tgz`; later builds use the next `rN` directory. Install the printed tarball path:
+The first build produces `dist/r1/deepseek-harness-design-0.5.4.tgz`; later builds use the next `rN` directory. Install the printed tarball path:
 
 ```sh
-dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.3.tgz
+dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.4.tgz
 # For the Desktop profile, use --profile desktop.
 ```
 
@@ -110,7 +110,9 @@ npm run check
 ./release.sh
 ```
 
-`npm pack` runs Host and React tests and JavaScript syntax checks through `prepack`. The release script builds an immutable snapshot in `dist/rN` and refuses to overwrite one. Set `DSG_RELEASE_DIR` to choose another output directory.
+`npm pack` runs Host, React, and release regression tests and JavaScript syntax checks through `prepack`. For distributable builds, use `./release.sh`: it runs the checks, freezes the package files, and packs that snapshot. It refuses to overwrite a snapshot or rebuild a version already completed in the selected output directory. Reuse the existing tarball for repeated installs; bump the package and lockfile versions before building changed content. Set `DSG_RELEASE_DIR` to choose another output directory; version uniqueness across separate directories and machines remains a release discipline.
+
+Each completed snapshot includes `BUILD.json` beside its tarball, recording the package SHA-256, packaged file hashes, source commit, and dirty state. The manifest is excluded from the npm package. Use these hashes to compare source, tarball, and installed files. A process start time after installation is a useful clue, but does not prove which profile, package path, or browser bundle is active.
 
 The distributable contains the Host, browser entry point, locales, bundle patch, both README files, and MIT license. Test fixtures and the test-only seed route are excluded.
 
