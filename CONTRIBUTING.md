@@ -22,7 +22,7 @@ npm run check
 | `cordis.patch.yml` | Host plugin registration in the Harness bundle. |
 | `locale/` | Plugin Manager descriptions. |
 | `tests/` | Host regression tests with controlled service mocks. |
-| `e2e/` | Browser tests, test-only seed plugin, and native Harness storage tests. |
+| `e2e/` | Browser tests, test-only seed plugin, and native Harness storage / sandbox tests. |
 
 ## Make a change
 

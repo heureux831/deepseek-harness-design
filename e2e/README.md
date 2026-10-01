@@ -7,7 +7,7 @@ Host 的单元回归用 `npm test` 执行。以下检查使用实际安装的 Ha
 先运行 `./release.sh`，把生成的 tarball 传给：
 
 ```sh
-./e2e/run.sh /absolute/path/deepseek-harness-design-0.5.0.tgz
+./e2e/run.sh /absolute/path/deepseek-harness-design-0.5.1.tgz
 ```
 
 脚本需要 macOS 上的 `/Applications/DeepSeek Harness.app` 和 `/Applications/Google Chrome.app`。通过 `DSG_HARNESS_APP` 可调整 Harness app 路径；`DSG_E2E_PORT` 和 `DSG_E2E_CDP` 可调整默认的 19401 / 19501 端口。
@@ -40,3 +40,26 @@ ELECTRON_RUN_AS_NODE=1 "$APP/Contents/MacOS/DeepSeek Harness" --expose-internals
 ```
 
 `DSG_HARNESS_MODULES` 可以指定另一份 Harness 的 `node_modules` 根目录。
+
+## 真实沙箱与工作区导出
+
+`harness-sandbox.mjs` 使用 Harness 自带的策略解析、会话投影、沙箱文件系统和存储服务。它在项目的 `dist/sandbox-*` 下创建独立测试工作区，结束后清除自己的测试数据。
+
+项目必须位于普通工作区中，不能放在 `/tmp` 或平台临时目录。`workspace-write` 默认允许写入临时目录，在临时目录中测试会掩盖「没有传入会话工作区策略」的问题；脚本会检查并拒绝这种测试位置。
+
+```sh
+APP='/Applications/DeepSeek Harness.app'
+ELECTRON_RUN_AS_NODE=1 "$APP/Contents/MacOS/DeepSeek Harness" --expose-internals \
+  e2e/harness-sandbox.mjs verify
+```
+
+覆盖三个方案的 HTML 导出、同一路径的原生 fs 调用对照、工作区外写入拒绝、两个会话的工作区隔离、会话只读模式切换、符号链接越界拒绝，以及无 Agent 的面板请求导入旧 HTML。`verify` 的可选第二参数可指定待验证发布快照的 `host/index.js`。
+
+复现 0.5.0 时，将第二参数指向该版本的原始 Host 模块（保留它所在目录中的 `persistence.js`）：
+
+```sh
+ELECTRON_RUN_AS_NODE=1 "$APP/Contents/MacOS/DeepSeek Harness" --expose-internals \
+  e2e/harness-sandbox.mjs repro /absolute/path/to/0.5.0/host/index.js
+```
+
+复现模式应得到三次 `file access denied under workspace-write mode`，再验证同一路径带会话策略后可以写入；它不修改用户原有的导出文件。

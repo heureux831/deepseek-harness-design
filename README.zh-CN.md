@@ -19,10 +19,10 @@ npm ci
 ./release.sh
 ```
 
-首次构建生成 `dist/r1/deepseek-harness-design-0.5.0.tgz`，后续使用递增的 `rN` 目录。安装脚本输出的本地发布包：
+首次构建生成 `dist/r1/deepseek-harness-design-0.5.1.tgz`，后续使用递增的 `rN` 目录。安装脚本输出的本地发布包：
 
 ```sh
-dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.0.tgz
+dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.1.tgz
 # Desktop 使用 --profile desktop
 ```
 
@@ -54,6 +54,8 @@ dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.0.tgz
 ```
 
 `design_apply` 返回 `persisted`（Harness 保存成功）和 `exported`（HTML 导出成功），二者分别报告。持久化失败返回 `ok: false`，已有稿件、版本和修订保持原状；额外 HTML 导出失败时会明确说明，已保存的稿件仍可恢复。没有工作目录的会话同样可以保存。
+
+挂载沙箱文件系统时，导出通过 `sandboxPolicy` 解析当前会话的既有策略：`workspace-write` 使用本会话工作区作为写入边界；`read-only` 仍可保存 Harness 草稿，但拒绝额外 HTML 导出。插件不会申请扩大访问模式。
 
 首次打开旧版会话时，插件会自动导入该会话哈希目录下的 `.html` 文件，保留原文件。旧版只导出最新 HTML，因此无法从这些文件还原旧修订；旧版仅存于进程内存、从未落盘的稿件不会自动迁移。
 
@@ -89,7 +91,7 @@ npm run check
 ./release.sh
 ```
 
-`release.sh` 生成新的 `dist/rN` 目录和标准 `deepseek-harness-design-0.5.0.tgz` 发布包，执行测试、安装运行依赖，并拒绝覆盖已有快照。可用 `DSG_RELEASE_DIR` 指定其他输出目录。包名保持 `deepseek-harness-design`，版本由 `package.json` 管理。`npm pack` 的 `prepack` 同样执行 Host 测试和语法检查。
+`release.sh` 生成新的 `dist/rN` 目录和标准 `deepseek-harness-design-0.5.1.tgz` 发布包，执行测试、安装运行依赖，并拒绝覆盖已有快照。可用 `DSG_RELEASE_DIR` 指定其他输出目录。包名保持 `deepseek-harness-design`，版本由 `package.json` 管理。`npm pack` 的 `prepack` 同样执行 Host 测试和语法检查。
 
 发布包包含 Host、浏览器入口、locale、bundle patch、README 和 MIT 许可；不会包含测试种子插件。公开发布前，可用生成的 tarball 安装到独立 profile 验证，再通过 `npm publish <tarball>` 发布。
 

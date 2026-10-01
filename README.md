@@ -33,10 +33,10 @@ npm ci
 ./release.sh
 ```
 
-The first build produces `dist/r1/deepseek-harness-design-0.5.0.tgz`; later builds use the next `rN` directory. Install the printed tarball path:
+The first build produces `dist/r1/deepseek-harness-design-0.5.1.tgz`; later builds use the next `rN` directory. Install the printed tarball path:
 
 ```sh
-dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.0.tgz
+dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.1.tgz
 # For the Desktop profile, use --profile desktop.
 ```
 
@@ -75,6 +75,8 @@ When a session has a workspace, the latest HTML is also exported to:
 ```
 
 `design_apply` reports `persisted` and `exported` separately. A storage failure returns `ok: false` and preserves the previous draft. An export failure is reported explicitly but does not discard the durable draft. Sessions without a workspace can still save.
+
+Exports use the current session's standing sandbox policy, resolved through `sandboxPolicy` when a sandboxed filesystem is mounted. In `workspace-write` mode, the session workspace is the write boundary; in `read-only` mode, Harness drafts can still persist but HTML exports are denied. The plugin does not request a wider mode.
 
 The storage domain and export path retain their original names for compatibility. Existing session-hashed HTML exports are imported without rewriting the originals. Only their latest HTML can be recovered; old revisions and drafts that existed only in the previous process's memory cannot be migrated.
 

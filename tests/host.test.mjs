@@ -10,11 +10,12 @@ async function harness(t, options = {}) {
   const root = options.root ?? await mkdtemp(join(tmpdir(), 'dsh-design-test-'))
   if (!options.root) t.after(() => rm(root, { recursive: true, force: true }))
   const routes = new Map(), tools = new Map(), contexts = new Map(), listeners = new Map()
-  const writes = [], disposers = [], sessions = new Map()
+  const writes = [], resolutions = [], disposers = [], sessions = new Map()
   const faults = { persistence: false, export: false }
   const snapshotPath = join(root, 'designer.json')
   let rows = new Map()
   const ctx = {
+    get(name) { return name === 'sandboxPolicy' ? options.sandboxPolicy : undefined },
     effect(register) { const dispose = register(); if (typeof dispose === 'function') disposers.push(dispose) },
     on(name, listener) {
       listeners.set(name, listener)
@@ -49,12 +50,13 @@ async function harness(t, options = {}) {
       return { table() { return table }, async close() {} }
     } },
     fs: {
-      async resolve(path) { return path },
-      async writeText(path, html) {
+      sandboxMode: options.sandboxMode,
+      async resolve(path, options) { resolutions.push({ path, options }); return path },
+      async writeText(path, html, _expected, signal, policy) {
         if (faults.export) throw new Error('simulated HTML export failure')
         await mkdir(dirname(path), { recursive: true })
         await writeFile(path, html)
-        writes.push({ path, html })
+        writes.push({ path, html, signal, policy })
       },
       async listDir(path) {
         return (await readdir(path, { withFileTypes: true })).map(file => ({
@@ -98,7 +100,7 @@ async function harness(t, options = {}) {
       sections: [{ name: 'designer.selection', text }],
     } },
   })
-  return { root, routes, tools, contexts, sessions, writes, faults, agent, request, prompt, commitPrompt, dispose }
+  return { root, routes, tools, contexts, sessions, writes, resolutions, faults, agent, request, prompt, commitPrompt, dispose }
 }
 
 const exec = agent => ({ agent })
@@ -121,6 +123,42 @@ test('production has no seed route; workspace exports use the public Agent heade
   assert.notEqual(h.writes[0].path, h.writes[1].path)
   assert.match(h.writes[0].path, /\/\.dsh-design\/[a-f0-9]{64}\/prototype\.html$/)
   assert.equal(h.writes[0].html, '<p>first</p>')
+})
+
+test('sandboxed exports carry the owning session policy and cancellation to the filesystem', async t => {
+  const calls = []
+  const h = await harness(t, {
+    sandboxMode: 'workspace-write',
+    sandboxPolicy: { resolve({ session }) {
+      const policy = { mode: 'workspace-write', workspaceRoot: session.header.cwd, sessionId: session.id }
+      calls.push({ session, policy })
+      return policy
+    } },
+  })
+  const signal = new AbortController().signal
+  const a = h.agent('a'), b = h.agent('b', join(h.root, 'workspace-b'))
+  for (const agent of [a, b, a]) {
+    const result = await h.tools.get('design_apply').execute({ html: '<p>saved</p>' }, { agent, signal })
+    assert.equal(result.exported, true, result.message)
+    const call = calls.at(-1)
+    assert.equal(call.session, agent.session)
+    assert.equal(h.writes.at(-1).policy, call.policy)
+    assert.equal(h.writes.at(-1).signal, signal)
+    assert.equal(h.resolutions.at(-1).options.cwd, agent.session.header.cwd)
+    assert.equal(h.resolutions.at(-1).options.signal, signal)
+  }
+  assert.equal(calls.length, 3, 'policy must be resolved per export, not cached between sessions or calls')
+})
+
+test('a sandboxed export with no policy service preserves the draft without using a fallback write', async t => {
+  const h = await harness(t, { sandboxMode: 'workspace-write' })
+  const a = h.agent('a')
+  const result = await write(h, a, { html: '<p>durable</p>' })
+  assert.equal(result.ok && result.persisted, true)
+  assert.equal(result.exported, false)
+  assert.match(result.message, /sandboxPolicy is unavailable/)
+  assert.equal(h.writes.length, 0)
+  assert.equal((await read(h, a)).html, '<p>durable</p>')
 })
 
 test('preview bootstrap escapes a session ID and retains the CSP sandbox', async t => {

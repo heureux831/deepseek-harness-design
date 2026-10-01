@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1 — Workspace export policy fix
+
+- Pass the owning session's resolved sandbox policy to HTML exports, matching the native fs tool call contract. Version 0.5.0 omitted this argument and used the deployment fallback root, so exports could fail even inside the session workspace.
+- Preserve session read-only mode, workspace containment, and symlink checks without requesting wider access.
+- Forward workspace resolution and cancellation to exports and legacy import reads.
+- Add a regression using the shipped Harness policy, projection, storage, and sandboxed filesystem services outside temporary roots. Previous temporary-directory checks concealed the failure because temporary roots are writable in workspace-write mode.
+- Keep Harness drafts durable when an optional HTML export is denied. Legacy import reads are not blocked by the mutation-only sandbox fence.
+
 ## 0.5.0 — Initial public source release
 
 - Adopt the package name `deepseek-harness-design` to avoid existing npm package names.

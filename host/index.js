@@ -400,7 +400,7 @@ export async function apply(ctx) {
   }
 
   /** Import the previous release's session-hashed HTML files once, preserving originals. */
-  async function ensureSession(sessionId, agent) {
+  async function ensureSession(sessionId, agent, signal) {
     const header = await sessionHeader(sessionId, agent)
     const identity = `${header.createdAt}\u0000${header.cwd ?? ''}`
     if (loaded.get(sessionId) === identity) return header
@@ -417,7 +417,7 @@ export async function apply(ctx) {
         const folder = `${header.cwd.replace(/\/+$/, '')}/.dsh-design/${createHash('sha256').update(sessionId).digest('hex')}`
         let files
         try {
-          files = await ctx.fs.listDir(await ctx.fs.resolve(folder))
+          files = await ctx.fs.listDir(await ctx.fs.resolve(folder, { cwd: header.cwd, signal }), signal)
         } catch (error) {
           if (error?.code !== 'FS_NOT_FOUND' && error?.code !== 'ENOENT') throw error
           files = []
@@ -428,7 +428,7 @@ export async function apply(ctx) {
           const slug = slugOf(file.name.slice(0, -5))
           if (file.name !== slug + '.html') continue
           if (imported.length >= MAX_BRANCHES) throw new Error(`Too many legacy designs (limit ${MAX_BRANCHES})`)
-          const bytes = await ctx.fs.readBytes(file.target, undefined, MAX_HTML * 4)
+          const bytes = await ctx.fs.readBytes(file.target, signal, MAX_HTML * 4)
           const html = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
           if (html.length > MAX_HTML) throw new Error(`Legacy design "${slug}" exceeds ${MAX_HTML} characters`)
           imported.push({ slug, html, version: 1, updatedAt: Date.now(), revisions: [], lastNote: 'Imported from 0.4' })
@@ -447,12 +447,22 @@ export async function apply(ctx) {
   }
 
   /** Extra workspace export; the Harness domain already owns the durable draft. */
-  async function exportDesign(entry, cwd, sessionId, signal) {
+  async function exportDesign(entry, cwd, sessionId, exec) {
     if (!cwd) return { exported: false, path: '', error: 'This session has no workspace directory.' }
     const path = `${cwd.replace(/\/+$/, '')}/.dsh-design/${createHash('sha256').update(sessionId).digest('hex')}/${entry.slug}.html`
     try {
-      const target = await ctx.fs.resolve(path)
-      await ctx.fs.writeText(target, entry.html, undefined, signal)
+      // The fs service does not infer the caller's session. Match native fs tools:
+      // resolve the standing policy for this session and pass it to the mutation.
+      // This preserves read-only and workspace containment without escalation.
+      let policy
+      if (ctx.fs.sandboxMode !== undefined) {
+        const resolver = ctx.get('sandboxPolicy')
+        if (!resolver) throw new Error('The filesystem confines writes but sandboxPolicy is unavailable.')
+        if (!exec.agent?.session) throw new Error('HTML export requires the owning Agent session.')
+        policy = resolver.resolve({ session: exec.agent.session })
+      }
+      const target = await ctx.fs.resolve(path, { cwd: policy?.workspaceRoot ?? cwd, signal: exec.signal })
+      await ctx.fs.writeText(target, entry.html, undefined, exec.signal, policy)
       return { exported: true, path }
     } catch (error) {
       return { exported: false, path, error: error instanceof Error ? error.message : String(error) }
@@ -709,7 +719,7 @@ export async function apply(ctx) {
     async execute(args, exec) {
       const sessionId = String(exec.agent?.id ?? 'anonymous')
       let header
-      try { header = await ensureSession(sessionId, exec.agent) } catch (error) {
+      try { header = await ensureSession(sessionId, exec.agent, exec.signal) } catch (error) {
         return { ok: false, version: 0, message: `design_apply: cannot restore session: ${error.message}` }
       }
       return withSession(sessionId, async () => {
@@ -791,7 +801,7 @@ export async function apply(ctx) {
             message: `design_apply: could not save; the previous draft is unchanged. ${error.message}` }
         }
         designs.set(sessionId, new Map(row.designs.map(item => [item.slug, item])))
-        const stored = await exportDesign(entry, header.cwd, sessionId, exec.signal)
+        const stored = await exportDesign(entry, header.cwd, sessionId, exec)
         const where = stored.exported
           ? ` Exported to ${stored.path}.`
           : ` Saved in Harness; HTML export unavailable: ${stored.error}`
@@ -856,7 +866,7 @@ export async function apply(ctx) {
     },
     async execute(args, exec) {
       const sessionId = String(exec.agent?.id ?? 'anonymous')
-      await ensureSession(sessionId, exec.agent)
+      await ensureSession(sessionId, exec.agent, exec.signal)
       const all = designsOf(sessionId)
       const slug = typeof args.name === 'string' && args.name.trim() !== ''
         ? slugOf(args.name)
@@ -961,7 +971,7 @@ export async function apply(ctx) {
     },
     async execute(_args, exec) {
       const sessionId = String(exec.agent?.id ?? 'anonymous')
-      await ensureSession(sessionId, exec.agent)
+      await ensureSession(sessionId, exec.agent, exec.signal)
       const all = designsOf(sessionId)
       return {
         count: all.length,
