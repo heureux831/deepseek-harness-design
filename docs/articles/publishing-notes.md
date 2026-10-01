@@ -33,4 +33,10 @@ DeepSeek、开源项目、AI 编程、前端开发。
 - 下载：https://github.com/heureux831/deepseek-harness-design/releases/latest
 - 反馈：https://github.com/heureux831/deepseek-harness-design/issues
 
-素材仅包含公开示例与截图。文章尚未代发到知乎账号。
+素材仅包含公开示例与截图。
+
+## 发布记录
+
+2026 年 10 月 1 日已发布至知乎账号 Knight，正文中的三张配图已上传至知乎。
+
+[阅读全文：我给 DeepSeek Harness 做了一个 Design 插件：边聊边看页面，点哪里改哪里](https://zhuanlan.zhihu.com/p/2089059811396790158)
