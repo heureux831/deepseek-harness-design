@@ -1,20 +1,24 @@
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
+import { realpathSync } from 'node:fs'
 import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { basename, dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const SOURCE = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const COPY = ['host', 'locale', 'client.js', 'package.json', 'package-lock.json',
   'cordis.patch.yml', 'README.md', 'README.zh-CN.md', 'LICENSE']
 const digest = bytes => createHash('sha256').update(bytes).digest('hex')
 const json = async path => JSON.parse(await readFile(path, 'utf8'))
+// Known local noise; do not exclude arbitrary dotfiles or resource logs.
+const isBuildNoise = name => ['.DS_Store', '.git', 'node_modules', 'npm-debug.log'].includes(name) || name.startsWith('._')
 async function exists(path) {
   try { await stat(path); return true } catch (error) { if (error.code === 'ENOENT') return false; throw error }
 }
 async function hashes(root) {
   const files = {}
   async function visit(path) {
+    if (isBuildNoise(basename(path))) return
     const absolute = join(root, path)
     if ((await stat(absolute)).isDirectory()) {
       for (const entry of (await readdir(absolute)).sort()) await visit(path + '/' + entry)
@@ -67,7 +71,9 @@ export async function release({ source = SOURCE, base = process.env.DSG_RELEASE_
     execute('npm', ['test'], { cwd: source })
     execute('npm', ['run', 'check'], { cwd: source })
     stage = await mkdtemp(join(base, `.r${next}-`))
-    for (const path of COPY) await cp(join(source, path), join(stage, path), { recursive: true })
+    for (const path of COPY) await cp(join(source, path), join(stage, path), {
+      recursive: true, filter: path => !isBuildNoise(basename(path)),
+    })
     if (JSON.stringify(await hashes(stage)) !== JSON.stringify(before)) {
       throw new Error('Release inputs changed during verification. Retry with stable source files.')
     }
@@ -80,8 +86,13 @@ export async function release({ source = SOURCE, base = process.env.DSG_RELEASE_
     const expectedFilename = `${pkg.name.replace(/^@/, '').replaceAll('/', '-')}-${pkg.version}.tgz`
     if (item.filename !== expectedFilename) throw new Error('Unexpected npm tarball name')
     const expectedFiles = Object.keys(before).filter(path => path !== 'package-lock.json').sort()
-    if (JSON.stringify(item.files.map(file => file.path).sort()) !== JSON.stringify(expectedFiles)) {
-      throw new Error('The npm tarball does not contain exactly the expected release files.')
+    const actualFiles = item.files.map(file => file.path).sort()
+    if (JSON.stringify(actualFiles) !== JSON.stringify(expectedFiles)) {
+      const expected = new Set(expectedFiles), actual = new Set(actualFiles)
+      const missing = expectedFiles.filter(path => !actual.has(path))
+      const unexpected = actualFiles.filter(path => !expected.has(path))
+      throw new Error('The npm tarball does not contain exactly the expected release files. '
+        + `Missing from tarball: ${missing.join(', ') || '(none)'}. Unexpected in tarball: ${unexpected.join(', ') || '(none)'}.`)
     }
     const files = {}
     for (const file of [...item.files].sort((a, b) => a.path.localeCompare(b.path))) {
@@ -109,7 +120,12 @@ export async function release({ source = SOURCE, base = process.env.DSG_RELEASE_
   }
 }
 
-if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+const isMain = (() => {
+  if (!process.argv[1]) return false
+  try { return realpathSync(resolve(process.argv[1])) === realpathSync(fileURLToPath(import.meta.url)) }
+  catch { return false }
+})()
+if (isMain) {
   try {
     if (process.argv.length > 3) throw new Error('usage: release.sh [positive release number]')
     const result = await release({ number: process.argv[2] })

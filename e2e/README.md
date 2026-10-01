@@ -7,7 +7,7 @@ Host 回归和真实 React / JSDOM 生命周期回归用 `npm test` 执行，包
 先运行 `./release.sh`，把生成的 tarball 传给：
 
 ```sh
-./e2e/run.sh /absolute/path/deepseek-harness-design-0.5.4.tgz
+./e2e/run.sh /absolute/path/deepseek-harness-design-0.5.5.tgz
 ```
 
 脚本需要 macOS 上的 `/Applications/DeepSeek Harness.app` 和 `/Applications/Google Chrome.app`。通过 `DSG_HARNESS_APP` 可调整 Harness app 路径；`DSG_E2E_PORT` 和 `DSG_E2E_CDP` 可调整默认的 19401 / 19501 端口。

@@ -48,6 +48,8 @@ This creates a new `dist/rN` snapshot, a standard npm tarball, and an external `
 
 Commit the final source before building a release so `BUILD.json` identifies a clean source commit. Tests run before packaging, release inputs are checked for changes, and npm packs the frozen snapshot. Failed builds leave no completed snapshot. A concurrent build owns `.release-lock`; after a crash, remove that lock only after verifying no builder is running. Install the tarball into an isolated Harness profile and run the integration checks before distributing it.
 
+The CLI supports symbolic link paths. Finder metadata and the documented local build noise are excluded before copying and hashing; other hidden resources remain verified. If npm omits a required file, the error lists its path. Release tests include real subprocess builds and npm tarball checks, using isolated caches and temporary source trees.
+
 For a release, update `package.json`, `package-lock.json`, the changelog, and versioned examples in both README files and E2E documentation. Keep `deepseek-harness-design` as the package name; keep the `designer` storage domain and `.dsh-design` export path stable.
 
 The GitHub CI runs Host, React, and release tests, syntax checks, and the release script on Node.js 22 and 24. It does not run macOS browser tests or publish to npm. The maintainer may publish a verified tarball with `npm publish <tarball>` after confirming registry ownership and the release version. Never put registry credentials in the repository.

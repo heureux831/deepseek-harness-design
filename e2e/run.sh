@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 SOURCE="$(cd "$(dirname "$0")/.." && pwd)"
-PACKAGE="${1:?usage: e2e/run.sh /absolute/path/deepseek-harness-design-0.5.4.tgz}"
+PACKAGE="${1:?usage: e2e/run.sh /absolute/path/deepseek-harness-design-0.5.5.tgz}"
 APP="${DSG_HARNESS_APP:-/Applications/DeepSeek Harness.app}"
 CLI="$APP/Contents/Resources/app.asar/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib/cli.js"
 WORK="$(mktemp -d /tmp/deepseek-harness-design-e2e.XXXXXX)"

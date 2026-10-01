@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.5 — Portable release entry and local metadata
+
+- Resolve both CLI and module paths through realpath, so invoking `release.sh` through a symbolic link (including macOS `/tmp`) executes the build instead of exiting successfully without an artifact.
+- Exclude `.DS_Store`, AppleDouble `._*`, `.git`, `node_modules`, and `npm-debug.log` from copied release inputs and their fingerprints. Keep other hidden resources and log files subject to normal package verification.
+- Name missing and unexpected files when npm's package contents differ from the expected set.
+- Add subprocess regressions that build real npm tarballs through a linked project directory and from a tree containing Finder metadata.
+- Runtime code is unchanged from 0.5.4 and 0.5.3 r6.
+
 ## 0.5.4 — Release identity
 
 - Give the finalized 0.5.3 r6 implementation a distinct release version. Host and browser behavior are unchanged from r6; the earlier local r5 build shared 0.5.3 but lacked the historical-click revision check.
