@@ -33,10 +33,10 @@ npm ci
 ./release.sh
 ```
 
-The first build produces `dist/r1/deepseek-harness-design-0.5.5.tgz`; later builds use the next `rN` directory. Install the printed tarball path:
+The first build produces `dist/r1/deepseek-harness-design-0.6.0.tgz`; later builds use the next `rN` directory. Install the printed tarball path:
 
 ```sh
-dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.5.tgz
+dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.6.0.tgz
 # For the Desktop profile, use --profile desktop.
 ```
 
@@ -56,7 +56,9 @@ dsh plugin --profile desktop remove dsh-design
 3. Enable element selection, click an element, and describe the change you want.
 4. Disable selection to use the prototype's own buttons and scripts.
 
-Request another direction to create an alternative. Further edits append revisions to that alternative. The toolbar switches alternatives and revisions; comparison mode has independent selectors on each side.
+Name alternatives by content or visual style, such as “Warm coffee homepage” or “Dark editorial”. Request another direction to preserve the current draft and create an alternative. Further edits append r1 / r2 / r3 revisions to that alternative. Compact dropdowns switch alternatives and revisions without growing the toolbar; comparison mode has independent selectors on each side.
+
+Use the pencil beside the alternative picker to rename it. Titles accept 1–80 characters, including Chinese; duplicate titles show a correction message. Renaming updates only the label, preserving prototype state and element selection without appending a revision. Existing drafts receive labels from their HTML headings or previous names, retaining stable IDs, export paths, and history.
 
 Historical revisions are read-only previews. To edit from one, tell the model its alternative name and revision number so it can read that version and append a new revision.
 
@@ -75,7 +77,7 @@ Limits per session: **32 alternatives**, **40 historical revisions per alternati
 When a session has a workspace, the latest HTML is also exported to:
 
 ```text
-<workspace>/.dsh-design/<SHA-256 session ID>/<alternative>.html
+<workspace>/.dsh-design/<SHA-256 session ID>/<stable alternative ID>.html
 ```
 
 `design_apply` reports `persisted` and `exported` separately. A storage failure returns `ok: false` and preserves the previous draft. An export failure is reported explicitly but does not discard the durable draft. Sessions without a workspace can still save.
@@ -90,7 +92,7 @@ Legacy import requires valid UTF-8, at most 32 eligible HTML files, and at most 
 
 | Tool | Purpose |
 | --- | --- |
-| `design_apply` | Create or replace HTML, patch with `oldString` and `newString`, or create an alternative with `asNew: true`. |
+| `design_apply` | Create or patch HTML; `title` is the descriptive label and `name` the stable ID. Use the `name` from `design_list` for existing alternatives; `asNew: true` creates a separate draft. |
 | `design_list` | List the current session's alternatives and revisions. |
 | `design_read` | Read current or historical HTML; use `html: false` for metadata only. |
 | `design_selection` | Read the selected element's tag, text, selector, outer HTML, and position. |

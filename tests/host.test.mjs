@@ -479,3 +479,43 @@ test('revision history and branch limits remain enforced at their boundaries', a
   assert.equal((await write(h, a, { name: 'alpha', html: 'x'.repeat(400001) })).ok, false)
   assert.equal((await read(h, a, { name: 'alpha' })).html, 'allowed edit')
 })
+
+test('descriptive titles support Chinese names and survive edits and restart', async t => {
+  const h = await harness(t), a = h.agent('titles')
+  const first = await write(h, a, { name: '咖啡首页 1', title: '暖白咖啡首页', html: '<h1>咖啡</h1>' })
+  const second = await write(h, a, { name: '商城首页 1', title: '深色编辑风', html: '<h1>商店</h1>' })
+  assert.notEqual(first.name, second.name)
+  assert.equal(first.title, '暖白咖啡首页')
+  await write(h, a, { name: first.name, html: '<h1>更新咖啡</h1>' })
+  assert.equal((await read(h, a, { name: first.name })).title, '暖白咖啡首页')
+  await h.dispose()
+  const restarted = await harness(t, { root: h.root })
+  assert.equal((await read(restarted, restarted.agent('titles'), { name: first.name })).title, '暖白咖啡首页')
+})
+
+test('unnamed designs infer a title and colliding labels remain distinguishable', async t => {
+  const h = await harness(t), a = h.agent('titles')
+  const first = await write(h, a, { html: '<title>暖白咖啡首页</title><p>页面</p>' })
+  const second = await write(h, a, { asNew: true, html: '<title>暖白咖啡首页</title><p>另一版</p>' })
+  assert.equal(first.title, '暖白咖啡首页')
+  assert.equal(second.title, '暖白咖啡首页 · 2')
+  assert.equal(second.name, 'design')
+})
+
+test('renaming changes only the label, stays isolated, and rolls back failed saves', async t => {
+  const h = await harness(t), a = h.agent('a'), b = h.agent('b')
+  await write(h, a, { name: 'warm', title: '暖白首页', html: '<button>one</button>' })
+  await write(h, b, { name: 'warm', title: '另一会话', html: '<p>other</p>' })
+  await select(h, 'a', 'warm')
+  const before = (await h.request('/designer/rev?session=a')).body.token
+  assert.equal((await h.request('/designer/rename', { session: 'a', name: 'warm', title: '极简咖啡首页' })).body.ok, true)
+  assert.notEqual((await h.request('/designer/rev?session=a')).body.token, before)
+  assert.equal((await read(h, a, { name: 'warm' })).version, 1)
+  assert.equal((await read(h, a, { name: 'warm' })).hasSelection, true)
+  assert.equal((await read(h, b, { name: 'warm' })).title, '另一会话')
+  h.faults.persistence = true
+  assert.equal((await h.request('/designer/rename', { session: 'a', name: 'warm', title: '不会保存' })).status, 500)
+  assert.equal((await read(h, a, { name: 'warm' })).title, '极简咖啡首页')
+  assert.equal((await h.request('/designer/rename', { session: 'a', name: 'warm', title: '' })).status, 400)
+  assert.equal((await h.request('/designer/rename', { session: 'a', name: 'warm', title: 'x' }, 'POST', { 'content-type': 'text/plain' })).status, 415)
+})

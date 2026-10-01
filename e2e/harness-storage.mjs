@@ -41,7 +41,7 @@ try {
   const read = args => tools.get('design_read').execute(args, exec)
   const write = args => tools.get('design_apply').execute(args, exec)
   if (mode === 'write') {
-    assert.equal((await write({ name: 'alpha', html: '<main>first</main>' })).persisted, true)
+    assert.equal((await write({ name: 'alpha', title: '暖白咖啡首页', html: '<main>first</main>' })).persisted, true)
     assert.equal((await write({ name: 'alpha', html: '<main>second</main>' })).version, 2)
     assert.equal((await write({ name: 'beta', asNew: true, html: '<aside>alternative</aside>' })).persisted, true)
     // Force the real backend's atomic publication to fail, then verify rollback.
@@ -50,6 +50,7 @@ try {
     await mkdir(path)
     assert.equal((await write({ name: 'alpha', html: '<main>rejected</main>' })).ok, false)
     assert.equal((await read({ name: 'alpha' })).html, '<main>second</main>')
+    assert.equal((await read({ name: 'alpha' })).title, '暖白咖啡首页')
     await rm(path, { recursive: true })
     await rename(path + '.backup', path)
     assert.equal((await read({ name: 'alpha', revision: 1 })).html, '<main>first</main>')
@@ -59,6 +60,7 @@ try {
   } else {
     assert.equal((await tools.get('design_list').execute({}, exec)).count, 2)
     assert.equal((await read({ name: 'alpha' })).html, '<main>second</main>')
+    assert.equal((await read({ name: 'alpha' })).title, '暖白咖啡首页')
     assert.equal((await read({ name: 'alpha', revision: 1 })).html, '<main>first</main>')
     assert.equal((await write({ name: 'alpha', oldString: 'second', newString: 'third' })).version, 3)
     console.log('PASS native JSON recovery in a second process and continued editing')

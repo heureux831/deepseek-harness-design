@@ -219,8 +219,40 @@ export async function apply(ctx) {
 
   /** Reduce a display name to a safe file stem; never empty. */
   function slugOf(value) {
-    const slug = String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '')
-    return slug === '' ? DEFAULT_SLUG : slug.slice(0, 64)
+    const text = String(value ?? '').trim()
+    if (/[^\x00-\x7f]/.test(text)) return 'design-' + createHash('sha256').update(text).digest('hex').slice(0, 10)
+    const slug = text.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '')
+    return slug === '' ? (text ? 'design-' + createHash('sha256').update(text).digest('hex').slice(0, 10) : DEFAULT_SLUG) : slug.slice(0, 64)
+  }
+
+  function cleanTitle(value) {
+    return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+  }
+
+  function inferredTitle(html, slug) {
+    const match = String(html ?? '').match(/<(?:title|h1)\b[^>]*>([\s\S]*?)<\/(?:title|h1)>/i)
+    const heading = cleanTitle(match?.[1].replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' '))
+    const candidate = heading || cleanTitle(slug).replace(/[-_]/g, ' ')
+    return /^(?:(?:方案|design)\s*)?[a-z]$|^(?:prototype|default|v\d+)$/i.test(candidate) || !candidate ? '设计稿' : candidate
+  }
+
+  function uniqueTitle(value, entries, except) {
+    const base = cleanTitle(value) || '设计稿'
+    const used = new Set(entries.filter(entry => entry.slug !== except).map(entry => entry.title))
+    let title = base
+    for (let index = 2; used.has(title); index++) {
+      const suffix = ' · ' + index
+      title = base.slice(0, 80 - suffix.length) + suffix
+    }
+    return title
+  }
+
+  // Give old rows readable, stable labels without changing their IDs or HTML.
+  function withTitles(entries) {
+    const result = []
+    for (const entry of entries) result.push({ ...entry,
+      title: entry.title || uniqueTitle(inferredTitle(entry.html, entry.slug), result) })
+    return result
   }
 
   /** The slug -> record map of one session, created on first access. */
@@ -266,6 +298,7 @@ export async function apply(ctx) {
       .sort((left, right) => right.updatedAt - left.updatedAt)
       .map((entry) => ({
         name: entry.slug,
+        title: entry.title || inferredTitle(entry.html, entry.slug),
         version: entry.version,
         bytes: entry.html.length,
         updatedAt: entry.updatedAt,
@@ -367,7 +400,7 @@ export async function apply(ctx) {
     for (const branch of branches) {
       const slug = slugOf(branch.name)
       const entry = {
-        version: 0, html: '', slug, cwd: '', updatedAt: 0, revisions: [], lastNote: 'seed',
+        version: 0, html: '', slug, title: branch.title, cwd: '', updatedAt: 0, revisions: [], lastNote: 'seed',
       }
       for (const html of branch.revisions) {
         if (entry.version > 0) {
@@ -380,6 +413,7 @@ export async function apply(ctx) {
         entry.updatedAt = Date.now() + shelf.size * 1000 + entry.version
         entry.lastNote = 'seed r' + entry.version
       }
+      entry.title = uniqueTitle(entry.title || inferredTitle(entry.html, slug), [...shelf.values()])
       shelf.set(slug, entry)
     }
     return designsOf(sessionId)
@@ -393,7 +427,7 @@ export async function apply(ctx) {
   const operations = new Map()
   let closing = false
   for (const [sessionId, row] of table.entries()) {
-    designs.set(sessionId, new Map(row.designs.map(entry => [entry.slug, entry])))
+    designs.set(sessionId, new Map(withTitles(row.designs).map(entry => [entry.slug, entry])))
   }
   seedActiveStore = seedDesignsForTest
   ctx.effect(() => async () => {
@@ -442,7 +476,7 @@ export async function apply(ctx) {
       }
       const row = table.get(sessionId)
       if (row && row.createdAt === header.createdAt && row.cwd === (header.cwd ?? '')) {
-        designs.set(sessionId, new Map(row.designs.map(entry => [entry.slug, entry])))
+        designs.set(sessionId, new Map(withTitles(row.designs).map(entry => [entry.slug, entry])))
       } else if (row) {
         // A reused session id belongs to a different lifecycle.
         designs.delete(sessionId)
@@ -477,7 +511,7 @@ export async function apply(ctx) {
         }
         if (imported.length) {
           const next = designerDomain.tables.sessions.valueSchema.parse({
-            createdAt: header.createdAt, cwd: header.cwd, designs: imported,
+            createdAt: header.createdAt, cwd: header.cwd, designs: withTitles(imported),
           })
           await table.put(sessionId, next)
           designs.set(sessionId, new Map(next.designs.map(entry => [entry.slug, entry])))
@@ -576,7 +610,7 @@ export async function apply(ctx) {
       // The token folds in every design's version, so the panel notices a new
       // alternative appearing just as fast as an edit to the one it shows.
       const all = designsOf(sessionId)
-      const token = all.map((item) => `${item.name}@${item.version}`).join('|')
+      const token = JSON.stringify(all.map(item => [item.name, item.version, item.title]))
       let version = 0
       for (const item of all) version += item.version
       sendJson(res, 200, {
@@ -600,6 +634,37 @@ export async function apply(ctx) {
       sendJson(res, 200, { designs: designsOf(sessionId) })
     },
   }), 'designer: designs route')
+
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'exact', path: '/designer/rename',
+    handler: async (req, res) => {
+      if (req.method !== 'POST') { sendJson(res, 405, { ok: false }); return }
+      if (!acceptsPanelJson(req, res)) return
+      try {
+        const body = JSON.parse(await readBody(req))
+        const sessionId = String(body.session ?? 'anonymous')
+        const header = await ensureSession(sessionId)
+        const title = cleanTitle(body.title)
+        if (typeof body.title !== 'string' || !title || body.title.length > 80) {
+          sendJson(res, 400, { ok: false, message: '名称需要 1–80 个字符。' }); return
+        }
+        await withSession(sessionId, async () => {
+          const entry = peek(sessionId, body.name)
+          if (!entry) { sendJson(res, 404, { ok: false, message: '这个方案已不存在。' }); return }
+          if ([...(designs.get(sessionId)?.values() ?? [])].some(item => item.slug !== entry.slug && item.title === title)) {
+            sendJson(res, 409, { ok: false, message: '已有同名方案，请换一个名称。' }); return
+          }
+          const shelf = new Map(designs.get(sessionId))
+          shelf.set(entry.slug, { ...entry, title })
+          const row = designerDomain.tables.sessions.valueSchema.parse({ createdAt: header.createdAt,
+            cwd: header.cwd ?? '', designs: [...shelf.values()] })
+          await table.put(sessionId, row)
+          designs.set(sessionId, new Map(row.designs.map(item => [item.slug, item])))
+          sendJson(res, 200, { ok: true, name: entry.slug, title })
+        })
+      } catch (error) { sendJson(res, 500, { ok: false, message: '名称未保存，请稍后重试。' }) }
+    },
+  }), 'designer: rename route')
 
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
@@ -764,6 +829,8 @@ export async function apply(ctx) {
       + 'in your runtime context — patch that element with oldString + newString instead of redesigning the screen. '
       + 'VERSIONS ARE SEPARATE DOCUMENTS: when the user wants another version, a variant, or something to compare '
       + '("再来一版", "对比一下", "另一个方向", "another version"), call this again with asNew: true and a distinct `name`. '
+      + 'Give each alternative a short descriptive `title` in the user\'s language, based on content and visual style '
+      + '(for example "暖白咖啡首页" or "深色编辑风"). Do not label alternatives A/B/C or generic version numbers. '
       + 'The Design panel owns the version switcher — do NOT build version tabs, A/B toggles, or comparison UI '
       + 'inside the prototype HTML; one document is exactly one design.',
     parameters: {
@@ -773,7 +840,8 @@ export async function apply(ctx) {
         oldString: { type: 'string', description: 'Literal text to find in the current document; must occur exactly once unless replaceAll is set.' },
         newString: { type: 'string', description: 'Replacement text for oldString.' },
         replaceAll: { type: 'boolean', description: 'Replace every occurrence of oldString. Default false.' },
-        name: { type: 'string', description: 'Design name; also its file stem. Omit to keep editing the current design.' },
+        name: { type: 'string', description: 'Stable design ID and export file stem; use the name returned by design_list to edit an existing alternative. Omit to keep editing the current design.' },
+        title: { type: 'string', description: 'Human-readable alternative title (1–80 characters), preferably in the user\'s language, describing its content or style. Existing title stays unchanged when omitted.' },
         asNew: { type: 'boolean', description: 'Save as a NEW alternative instead of editing the current one. Use this when the user asks for another version / a variant to compare. A colliding name is suffixed automatically.' },
         note: { type: 'string', description: 'One short line describing this edit, echoed back to the user.' },
       },
@@ -787,6 +855,8 @@ export async function apply(ctx) {
           persisted: { type: 'boolean' },
           exported: { type: 'boolean' },
           path: { type: 'string' },
+          name: { type: 'string' },
+          title: { type: 'string' },
           version: { type: 'number' },
           bytes: { type: 'number' },
           message: { type: 'string' },
@@ -806,7 +876,7 @@ export async function apply(ctx) {
         const asked = typeof args.name === 'string' && args.name.trim() !== '' ? args.name.trim() : ''
         // `asNew` mints a fresh alternative; otherwise the named design is edited
         // in place, falling back to the default when nothing is named yet.
-        const slug = asNew ? uniqueSlug(sessionId, asked || `v${designsOf(sessionId).length + 1}`)
+        const slug = asNew ? uniqueSlug(sessionId, asked || args.title || 'design')
           : (asked !== '' ? slugOf(asked) : defaultSlug(sessionId))
         const current = peek(sessionId, slug)
         if (!current && designsOf(sessionId).length >= MAX_BRANCHES) {
@@ -849,7 +919,7 @@ export async function apply(ctx) {
         }
 
         // Append, never overwrite: the previous revision stays browsable, so the
-        // panel can walk A1 -> A2 -> A3 without the model remembering anything.
+        // panel can walk r1 -> r2 -> r3 without the model remembering anything.
         if (entry.version > 0) {
           entry.revisions.push({
             version: entry.version,
@@ -862,6 +932,8 @@ export async function apply(ctx) {
           }
         }
         entry.html = html
+        entry.title = uniqueTitle(cleanTitle(args.title) || entry.title || inferredTitle(html, asked || slug),
+          [...(designs.get(sessionId)?.values() ?? [])], slug)
         entry.version += 1
         entry.updatedAt = Math.max(Date.now(), ...designsOf(sessionId).map(item => item.updatedAt + 1))
         entry.lastNote = typeof args.note === 'string' ? args.note.slice(0, 2000) : ''
@@ -891,7 +963,7 @@ export async function apply(ctx) {
         const siblings = designsOf(sessionId)
         const note = typeof args.note === 'string' && args.note !== '' ? ` (${args.note})` : ''
         const alternatives = siblings.length > 1
-          ? ` This session now holds ${siblings.length} alternatives: ${siblings.map((item) => item.name).join(', ')}.`
+          ? ` This session now holds ${siblings.length} alternatives: ${siblings.map((item) => item.title).join(', ')}.`
           : ''
         return {
           ok: true,
@@ -899,11 +971,12 @@ export async function apply(ctx) {
           exported: stored.exported,
           path: stored.path,
           name: entry.slug,
+          title: entry.title,
           version: entry.version,
           count: siblings.length,
           bytes: entry.html.length,
           revision: entry.version,
-          message: `Designer: "${entry.slug}" is now at revision ${entry.version}${note}, ${entry.html.length} characters`
+          message: `Designer: "${entry.title}" is now at revision ${entry.version}${note}, ${entry.html.length} characters`
             + `${asNew ? ' (saved as a new alternative)' : ''}.`
             + ' The user\'s Design tab reloads it automatically.' + alternatives + where,
         }
@@ -929,6 +1002,7 @@ export async function apply(ctx) {
         type: 'object',
         properties: {
           name: { type: 'string' },
+          title: { type: 'string' },
           version: { type: 'number' },
           bytes: { type: 'number' },
           count: { type: 'number' },
@@ -942,7 +1016,7 @@ export async function apply(ctx) {
       render: (_args, value) => [{
         type: 'text',
         text: [
-          `Designer: "${value.name}" version ${value.version}, ${value.bytes} characters.`
+          `Designer: "${value.title || value.name}" version ${value.version}, ${value.bytes} characters.`
             + (value.hasSelection ? ' The user has selected an element in the preview.' : ''),
           value.html ?? '',
           value.message ?? '',
@@ -981,6 +1055,7 @@ export async function apply(ctx) {
       }
       return {
         name: entry.slug,
+        title: entry.title,
         version: wanted,
         bytes: html.length,
         count: all.length,
@@ -1043,8 +1118,8 @@ export async function apply(ctx) {
   const listTool = {
     name: 'design_list',
     description:
-      'List every prototype branch this session holds (A / B / C) together with that branch\'s revision '
-      + 'chain (A1, A2, A3). Call it before comparing, or to find the exact name of a branch the user refers to.',
+      'List every prototype alternative with its descriptive title, stable name, and revision '
+      + 'chain (r1, r2, r3). Call it before comparing, or to find the exact name of a branch the user refers to.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     output: {
       schema: {
@@ -1075,7 +1150,7 @@ export async function apply(ctx) {
             .map((entry) => entry.version)
             .sort((left, right) => left - right)
             .join(', ')
-          return `- ${item.name}: at revision ${item.version} (${item.bytes} chars)`
+          return `- ${item.title} (name: ${item.name}): at revision ${item.version} (${item.bytes} chars)`
             + (chain === '' ? '; no earlier revisions' : `; revisions kept: ${chain}`)
         }).join('\n'),
       }

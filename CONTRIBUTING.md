@@ -34,7 +34,7 @@ npm run check
 5. Update both README files when installation, behavior, limits, or compatibility changes. Add a changelog entry.
 6. Open a pull request describing the change and the checks actually run.
 
-Use public Harness service contracts. Keep session state isolated, persist before exposing a successful edit, and preserve storage compatibility. Production code must not register the E2E seed route or enable same-origin access for the preview iframe.
+Use public Harness service contracts. Keep session state isolated, persist before exposing a successful edit, and preserve storage compatibility. Keep display `title` separate from stable `name` / `slug`. Titles are optional in stored rows for compatibility; renaming must preserve history, file paths, prototype state, and element bindings. Production code must not register the E2E seed route or enable same-origin access for the preview iframe.
 
 Do not commit generated HTML, Harness profiles, screenshots, logs, API keys, launch tokens, or tarballs. Redact session content and credentials from bug reports. See [SECURITY.md](SECURITY.md) for sensitive reports.
 

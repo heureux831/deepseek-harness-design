@@ -7,7 +7,7 @@ Host 回归和真实 React / JSDOM 生命周期回归用 `npm test` 执行，包
 先运行 `./release.sh`，把生成的 tarball 传给：
 
 ```sh
-./e2e/run.sh /absolute/path/deepseek-harness-design-0.5.5.tgz
+./e2e/run.sh /absolute/path/deepseek-harness-design-0.6.0.tgz
 ```
 
 脚本需要 macOS 上的 `/Applications/DeepSeek Harness.app` 和 `/Applications/Google Chrome.app`。通过 `DSG_HARNESS_APP` 可调整 Harness app 路径；`DSG_E2E_PORT` 和 `DSG_E2E_CDP` 可调整默认的 19401 / 19501 端口。
@@ -22,13 +22,13 @@ dsh --profile web --patch ./test-seed.patch.yml --no-open --port 19401
 
 `e2e.cjs` 与 `cdp.cjs` 是 CommonJS，可直接在本包的 `type: module` 下运行，无需复制到包外。
 
-覆盖应用启动、面板挂载、opaque-origin 沙箱和响应 CSP、轮询刷新、方案/历史修订切换、两栏对比、单栏和对比的实际视口宽度、单方案历史对比、点选回传、关开开关、在途点击拒收和重新绑定。
+覆盖应用启动、面板挂载、opaque-origin 沙箱和响应 CSP、轮询刷新、方案/历史修订切换、两栏对比、单栏和对比的实际视口宽度、单方案历史对比、点选回传、关开开关、在途点击拒收和重新绑定，以及中文重命名保留原型状态与点选、32 方案和 41 修订在 320px 侧栏的单栏 / 对比布局。
 
 `POST /designer/dev/seed` 仅由 `test-seed/index.js` 注册。正式 tarball 没有测试插件，也不会注册这条路由。
 
 ## 真实存储与进程重启
 
-以下脚本使用 Harness 自带的 Cordis、storage-domain 和 JSON 存储提供者。第一次进程保存方案和修订，并通过阻断原子文件替换制造持久化失败；第二次进程读回数据并继续追加修订。
+以下脚本使用 Harness 自带的 Cordis、storage-domain 和 JSON 存储提供者。第一次进程保存方案和修订，并通过阻断原子文件替换制造持久化失败；第二次进程读回数据并继续追加修订，同时检查中文显示名称能够跨进程保留。
 
 ```sh
 APP='/Applications/DeepSeek Harness.app'

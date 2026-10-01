@@ -21,12 +21,17 @@ window.__ModuleLoader__.load({
     const CSS_TAG_ID = 'deepseek-harness-design/panel.css'
 
     const CSS = [
-      '.dsg-root{display:flex;flex-direction:column;height:100%;min-height:0;color:var(--dsw-alias-label-primary,#111)}',
-      '.dsg-bar{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.08));flex:none;flex-wrap:wrap}',
-      '.dsg-title{font-size:12px;font-weight:500;color:var(--dsw-alias-label-secondary,#666);margin-right:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}',
-      '.dsg-btn{appearance:none;border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.12));background:transparent;color:var(--dsw-alias-label-secondary,#555);border-radius:6px;font:inherit;font-size:12px;line-height:18px;padding:2px 8px;cursor:pointer;white-space:nowrap}',
+      '.dsg-root{display:flex;flex-direction:column;height:100%;min-height:0;color:var(--dsw-alias-label-primary,inherit)}',
+      '.dsg-bar{display:flex;align-items:center;gap:4px;padding:8px;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.16));flex:none;flex-wrap:nowrap}',
+      '.dsg-btn{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:5px;height:30px;border:1px solid transparent;background:transparent;color:var(--dsw-alias-label-secondary,#777);border-radius:7px;font:inherit;font-size:12px;line-height:18px;padding:0 6px;cursor:pointer;white-space:nowrap;transition:background .12s,color .12s}',
       '.dsg-btn:hover{background:var(--dsw-alias-bg-l2,rgba(0,0,0,.05));color:var(--dsw-alias-label-primary,#111)}',
-      '.dsg-btn[data-on="1"]{background:var(--dsw-alias-state-business-primary,#4176e6);border-color:transparent;color:#fff}',
+      '.dsg-btn[data-on="1"]{background:rgba(65,118,230,.13);color:var(--dsw-alias-state-business-primary,#5e8ded)}',
+      '.dsg-btn:disabled{opacity:.45;cursor:default}.dsg-btn:focus-visible,.dsg-select:focus-visible,.dsg-input:focus-visible{outline:2px solid #5e8ded;outline-offset:2px}',
+      '.dsg-icon-btn{width:30px;flex:none;padding:0}.dsg-device{display:flex;align-items:center;gap:2px;padding:2px;border:1px solid rgba(128,128,128,.16);border-radius:9px;background:rgba(128,128,128,.04)}',
+      '.dsg-device .dsg-btn{width:26px;height:26px;padding:0}.dsg-device .dsg-btn[data-on="1"]{background:rgba(128,128,128,.18);color:var(--dsw-alias-label-primary,inherit)}',
+      '.dsg-picker{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}.dsg-picker[data-kind="revision"]{flex:0 1 104px}.dsg-picker-label{font-size:10px;line-height:14px;color:var(--dsw-alias-label-tertiary,#888)}',
+      '.dsg-header{align-items:flex-end;flex-wrap:nowrap;gap:8px}.dsg-rename{display:flex;flex-wrap:wrap;gap:6px;padding:8px 10px;border-bottom:1px solid rgba(128,128,128,.16)}',
+      '.dsg-input{min-width:0;flex:1;min-height:30px;border:1px solid rgba(128,128,128,.25);background:transparent;border-radius:7px;padding:4px 8px;color:inherit;font:inherit;font-size:12px}.dsg-rename-error{width:100%;font-size:12px;color:#d97070}',
       '.dsg-canvas{flex:1;min-height:0;overflow:auto;display:flex;justify-content:center;align-items:flex-start;padding:10px;background:var(--dsw-alias-bg-l2,rgba(0,0,0,.04))}',
       '.dsg-holder{height:100%;min-height:400px;transition:width .16s ease}',
       '.dsg-frame{border:0;background:#fff;width:100%;height:100%;min-height:400px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.12);display:block}',
@@ -48,17 +53,11 @@ window.__ModuleLoader__.load({
       '.dsg-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.dsg-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:16px;color:var(--dsw-alias-label-secondary,#666);background:var(--dsw-alias-bg-l2,rgba(0,0,0,.04));border-radius:6px;padding:6px 8px;max-height:88px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0}',
       '.dsg-spacer{flex:1}',
-      '.dsg-select{appearance:none;border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.12));background:transparent;color:var(--dsw-alias-label-secondary,#555);border-radius:6px;font:inherit;font-size:12px;line-height:18px;padding:2px 6px;max-width:150px;cursor:pointer}',
-      '.dsg-bar-versions{gap:8px}',
-      '.dsg-versions{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-width:0}',
-      '.dsg-vrows{display:flex;flex-direction:column;gap:5px;min-width:0;flex:1}',
-      '.dsg-ver{appearance:none;border:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.12));background:transparent;color:var(--dsw-alias-label-secondary,#555);border-radius:999px;font:inherit;font-size:12px;line-height:18px;padding:2px 10px;cursor:pointer;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis}',
-      '.dsg-ver:hover:not([data-on="1"]){background:var(--dsw-alias-bg-l2,rgba(0,0,0,.05));color:var(--dsw-alias-label-primary,#111)}',
-      '.dsg-ver[data-on="1"]{background:var(--dsw-alias-state-business-primary,#4176e6);border-color:transparent;color:#fff}',
-      '.dsg-ver:disabled{opacity:.5;cursor:default}',
-      '.dsg-split{flex:1;min-height:0;display:flex;gap:1px;background:var(--dsw-alias-border-l2,rgba(0,0,0,.08))}',
-      '.dsg-side{flex:1 1 0;min-width:0;display:flex;flex-direction:column;background:var(--dsw-alias-bg-document,#fff)}',
-      '.dsg-sidebar{display:flex;align-items:center;gap:6px;padding:5px 8px;flex:none;border-bottom:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.08))}',
+      '.dsg-select{width:100%;min-width:0;height:32px;border:1px solid rgba(128,128,128,.18);background:rgba(128,128,128,.05);color:inherit;border-radius:8px;font:inherit;font-size:12px;padding:0 7px;cursor:pointer;text-overflow:ellipsis;color-scheme:inherit}',
+      '.dsg-select option{color:CanvasText;background:Canvas}',
+      '.dsg-split{flex:1;min-height:0;display:flex;gap:0;background:transparent}',
+      '.dsg-side + .dsg-side{border-left:1px solid var(--dsw-alias-border-l2,rgba(128,128,128,.16))}',
+      '.dsg-side{flex:1 1 0;min-width:0;display:flex;flex-direction:column;background:transparent}',
       '.dsg-sidehead{display:flex;align-items:center;gap:6px;padding:5px 8px;flex:none;flex-wrap:wrap}',
       '.dsg-sidehead + .dsg-sidehead{border-top:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.05));padding-top:4px;padding-bottom:4px}',
       '.dsg-tag{font-size:11px;font-weight:600;color:var(--dsw-alias-label-tertiary,#999);letter-spacing:.04em}',
@@ -68,6 +67,18 @@ window.__ModuleLoader__.load({
     ].join('\n')
 
     const WIDTHS = [[0, '自适应'], [390, '手机'], [834, '平板'], [1280, '桌面']]
+
+    function icon(name) {
+      const paths = {
+        fit: 'M4 9V4h5 M15 4h5v5 M20 15v5h-5 M9 20H4v-5',
+        phone: 'M8 3h8v18H8z M11 18h2', tablet: 'M5 3h14v18H5z M11 18h2',
+        desktop: 'M3 4h18v13H3z M12 17v4 M8 21h8',
+        compare: 'M3 4h18v16H3z M12 4v16', select: 'M5 3l14 9-7 2-3 7z',
+        refresh: 'M20 7v5h-5 M20 12a8 8 0 1 0-2 6', rename: 'M15 4l5 5 M4 20l4-1L21 6l-3-3L5 16z',
+      }
+      return h('svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6,
+        strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true }, h('path', { d: paths[name] }))
+    }
 
     /** Quote a value for a query string. */
     function q(value) {
@@ -92,7 +103,10 @@ window.__ModuleLoader__.load({
       const timeout = AbortSignal.timeout(10000)
       settings.signal = settings.signal ? AbortSignal.any([settings.signal, timeout]) : timeout
       const response = await fetch(url, settings)
-      if (!response.ok) throw new Error('HTTP ' + response.status)
+      if (!response.ok) {
+        const detail = await response.json().catch(function () { return {} })
+        throw new Error(detail.message || 'HTTP ' + response.status)
+      }
       return response.json()
     }
 
@@ -101,7 +115,7 @@ window.__ModuleLoader__.load({
       const state = React.useState({ designs: [], status: 'loading', error: '' })
       React.useEffect(function () {
         if (sessionId === '') return undefined
-        let active = true, pending = false, committedToken, hadError = false
+        let active = true, pending = false, committedToken, contentToken, hadError = false
         const controller = new AbortController()
         async function load() {
           if (pending) return
@@ -115,7 +129,9 @@ window.__ModuleLoader__.load({
               if (!active) return
               committedToken = meta.token
               state[1]({ designs: value.designs, status: 'ready', error: '' })
-              changed()
+              const nextContent = JSON.stringify(value.designs.map(function (item) { return [item.name, item.version] }))
+              if (contentToken !== nextContent) changed()
+              contentToken = nextContent
             } else if (active && hadError) {
               state[1](function (previous) { return Object.assign({}, previous, { status: 'ready', error: '' }) })
             }
@@ -177,6 +193,9 @@ window.__ModuleLoader__.load({
       const rightState = React.useState('')
       const right = rightState[0]
       const setRight = rightState[1]
+      const renameState = React.useState(null)
+      const rename = renameState[0], setRename = renameState[1]
+      const renameSequence = React.useRef(0)
       const viewingOld = singleRev.name === left && singleRev.shown > 0 && singleRev.shown !== singleRev.current
       const frameRefs = React.useRef(new Set())
       const comparePrimed = React.useRef(false)
@@ -208,6 +227,8 @@ window.__ModuleLoader__.load({
       const changed = React.useCallback(function () { setBump(function (count) { return count + 1 }) }, [])
       const documents = useDocuments(sessionId, props.ctx, changed, refresh)
       const designs = documents.designs
+      function designTitle(name) { return designs.find(function (entry) { return entry.name === name })?.title || name }
+      React.useEffect(function () { renameSequence.current += 1; setRename(null) }, [left, compare])
 
       // Keep the compare pickers pointed at real alternatives.
       React.useEffect(function () {
@@ -486,42 +507,34 @@ window.__ModuleLoader__.load({
         })
       }
 
-      /** A picker over the session's alternatives. */
-      /**
-       * The version bar: one capsule per alternative, always rendered so the
-       * panel always OWNS version switching. A prototype must not grow its own
-       * switcher — that is what this bar is for.
-       */
+      /** Bounded pickers keep long alternative and revision lists out of the canvas. */
       function versions(label, items, value, onChange, disabled) {
-        return h('div', { className: 'dsg-versions', role: 'tablist' },
-          h('span', { className: 'dsg-tag' }, label),
-          items.length === 0
-            ? h('span', { className: 'dsg-tag' }, '—')
-            : items.map(function (item) {
-              const on = item.value === value
-              return h('button', {
-                key: String(item.value),
-                type: 'button',
-                role: 'tab',
-                className: 'dsg-ver',
-                'data-on': on ? '1' : '0',
-                disabled: disabled === true,
-                title: item.title,
-                onClick: function () { if (!on) onChange(item.value) },
-              }, item.text)
-            }),
+        const numeric = label !== '方案'
+        const selected = items.some(function (item) { return item.value === value }) ? value : (items[0]?.value || '')
+        return h('label', { className: 'dsg-picker', 'data-kind': numeric ? 'revision' : 'branch' },
+          label ? h('span', { className: 'dsg-picker-label' }, label) : null,
+          h('select', { className: 'dsg-select', 'aria-label': label || '修订', disabled: disabled === true || !items.length,
+            value: String(selected), title: items.find(function (item) { return item.value === selected })?.title,
+            onChange: function (event) { onChange(numeric ? Number(event.target.value) : event.target.value) } },
+          items.length ? items.map(function (item) {
+            return h('option', { key: String(item.value), value: String(item.value) }, item.text)
+          }) : h('option', { value: '' }, '读取中…')),
         )
       }
 
-      const buttons = WIDTHS.map(function (pair) {
+      const devices = WIDTHS.map(function (pair, index) {
         return h('button', {
           key: 'w' + pair[0],
           type: 'button',
           className: 'dsg-btn',
           'data-on': width === pair[0] ? '1' : '0',
+          'aria-label': pair[1], 'aria-pressed': width === pair[0],
+          title: pair[1] + (pair[0] ? ' · ' + pair[0] + ' px' : ' · 跟随面板宽度'),
           onClick: function () { setWidth(pair[0]) },
-        }, pair[1])
+        }, icon(['fit', 'phone', 'tablet', 'desktop'][index]))
       })
+      const buttons = [h('div', { key: 'devices', className: 'dsg-device', role: 'group', 'aria-label': '预览尺寸' }, devices),
+        h('span', { key: 'space', className: 'dsg-spacer' })]
 
       // Comparing two revisions of ONE branch is a first-class case, so the
       // gate is "two panes' worth of content", not "two branches".
@@ -533,6 +546,7 @@ window.__ModuleLoader__.load({
         type: 'button',
         className: 'dsg-btn',
         'data-on': compare ? '1' : '0',
+        'aria-pressed': compare,
         title: canCompare
           ? '并排对比（两个方案，或同一方案的两个修订）'
           : '还只有一版，先让模型「再来一版」或改一次',
@@ -544,7 +558,7 @@ window.__ModuleLoader__.load({
           }
           setCompare(function (value) { return !value })
         },
-      }, compare ? '对比中' : '对比'))
+      }, icon('compare'), compare ? '对比中' : '对比'))
 
       buttons.push(h('button', {
         key: 'inspect',
@@ -552,6 +566,7 @@ window.__ModuleLoader__.load({
         disabled: sessionId === '' || !control.synced,
         className: 'dsg-btn',
         'data-on': inspect ? '1' : '0',
+        'aria-pressed': inspect,
         title: inspect
           ? '点选已开启：点击预览里的元素会把它的源码上下文交给模型。关闭即解除绑定。'
           : '点选已关闭：之前点过的元素已解除绑定，模型不会再收到它。',
@@ -566,15 +581,15 @@ window.__ModuleLoader__.load({
           modeRequest.current = { session: sessionId, on: next, client: clientId.current, sequence: actionSequence.current }
           syncMode.current()
         },
-      }, '点选'))
+      }, icon('select'), '点选'))
 
       buttons.push(h('button', {
         key: 'reload',
         type: 'button',
-        className: 'dsg-btn',
-        title: '重新载入预览',
+        className: 'dsg-btn dsg-icon-btn',
+        title: '刷新预览', 'aria-label': '刷新',
         onClick: function () { setRefresh(function (count) { return count + 1 }) },
-      }, '刷新'))
+      }, icon('refresh')))
 
       const holderStyle = { width: width === 0 ? '100%' : width + 'px', flexShrink: 0 }
 
@@ -588,7 +603,7 @@ window.__ModuleLoader__.load({
           { title: '点选元素，继续修改', text: '开启工具栏的「点选」，点击预览中的按钮、文字或卡片，再回到对话说要怎么改。',
             example: '把这个按钮改成描边样式，文字改为「了解更多」。' },
           { title: '尝试另一个方向', text: '想保留当前稿子，就明确要求一个新方案。切换「方案」看不同方向，切换「修订」回看修改前的版本。',
-            example: '保留这一版，再做一个深色方案。' },
+            example: '保留「暖白咖啡首页」，再做一个叫「深色编辑风」的新方案。' },
           { title: '切换尺寸，并排对比', text: '用「手机 / 平板 / 桌面」查看不同宽度。有两个方案或两个修订后，点「对比」并排查看，两侧可分别切换。' },
         ]
         canvas = h('main', { className: 'dsg-welcome', 'aria-label': 'Design 使用指南' },
@@ -614,7 +629,7 @@ window.__ModuleLoader__.load({
         )
       } else if (compare) {
         const branchOptions = designs.map(function (entry) {
-          return { value: entry.name, text: entry.name, title: entry.name + ' · 修订 ' + entry.version }
+          return { value: entry.name, text: entry.title || entry.name, title: (entry.title || entry.name) + ' · 修订 ' + entry.version }
         })
         const pair = [
           { side: 'left', name: left, setBranch: setLeft, chain: leftRev, setChain: setLeftRev },
@@ -665,23 +680,21 @@ window.__ModuleLoader__.load({
         )
       }
 
-      // Row 1 picks the branch (the user's A / B / C). Row 2 picks which
-      // revision of that branch is on screen (A1 / A2 / A3).
       const branchRow = versions('方案',
         designs.map(function (item) {
           return {
             value: item.name,
-            text: item.name,
-            title: item.name + ' · 修订 ' + item.version + ' · ' + item.bytes + ' 字符',
+            text: item.title || item.name,
+            title: (item.title || item.name) + ' · 修订 ' + item.version,
           }
         }),
         left, setLeft, designs.length < 2)
 
-      /** One pane's revision capsules, newest first. */
+      /** One pane's revision options, newest first. */
       function revisionItems(chain) {
         const items = []
         if (chain.current > 0) {
-          items.push({ value: chain.current, text: 'r' + chain.current, title: '当前修订' })
+          items.push({ value: chain.current, text: '最新 · r' + chain.current, title: '当前修订' })
         }
         chain.revisions.forEach(function (item) {
           if (item.version === chain.current) return
@@ -703,47 +716,36 @@ window.__ModuleLoader__.load({
           })
         }, singleItems.length < 2)
 
-      const versionBar = compare || designs.length === 0 ? null : h('div', { className: 'dsg-bar dsg-bar-versions' },
-        h('div', { className: 'dsg-vrows' },
-          branchRow,
-          revisionRow,
-        ),
-        h('span', { className: 'dsg-spacer' }),
-        viewingOld
-          ? h('button', {
-            type: 'button',
-            className: 'dsg-btn',
-            'data-on': '1',
-            title: '这一版是历史修订；让模型照它改，就会生成新的当前修订',
-            onClick: function () {
-              setSingleRev(function (previous) {
-                return { name: previous.name, current: previous.current, revisions: previous.revisions, shown: 0 }
-              })
-              setBump(function (count) { return count + 1 })
-            },
-          }, '回到最新')
-          : h('span', { className: 'dsg-tag' },
-            designs.length <= 1 ? '让模型「再来一版」即可对比' : designs.length + ' 个方案'),
-      )
+      const versionBar = compare || !designs.length ? null : h('div', { className: 'dsg-bar dsg-header' },
+        branchRow, revisionRow, h('button', { type: 'button', className: 'dsg-btn dsg-icon-btn',
+          title: '重命名方案', 'aria-label': '重命名方案',
+          onClick: function () { setRename({ name: left, title: designTitle(left), saving: false, error: '' }) } }, icon('rename')))
 
-      const toolbar = compare ? null : h('div', { className: 'dsg-bar' },
-        h('span', { className: 'dsg-title', title: designs.length === 0 ? '使用指南' : (left || 'prototype') },
-          (designs.length === 0 ? '使用指南' : (left || 'prototype'))
-            + (singleRev.name === left && singleRev.current > 0 ? ' · r' + (viewingOld ? singleRev.shown : singleRev.current) : '')),
-        h('span', { className: 'dsg-spacer' }),
-        buttons,
-      )
+      const renameForm = rename ? h('form', { className: 'dsg-rename', onSubmit: async function (event) {
+        event.preventDefault()
+        const draft = rename, sequence = ++renameSequence.current
+        setRename(Object.assign({}, draft, { saving: true, error: '' }))
+        try {
+          const value = await requestJson('/designer/rename', { method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ session: sessionId, name: draft.name, title: draft.title.trim() }) })
+          if (!value.ok) throw new Error(value.message || '名称未保存。')
+          if (alive.current && sequence === renameSequence.current) setRename(null)
+        } catch (error) {
+          if (alive.current && sequence === renameSequence.current) setRename(Object.assign({}, draft,
+            { saving: false, error: error.message.startsWith('HTTP') ? '名称未保存，请稍后重试。' : error.message }))
+        }
+      } }, h('input', { className: 'dsg-input', 'aria-label': '方案名称', value: rename.title, maxLength: 80, required: true,
+        autoFocus: true, disabled: rename.saving, onChange: function (event) { setRename(Object.assign({}, rename, { title: event.target.value })) } }),
+      h('button', { className: 'dsg-btn', type: 'submit', disabled: rename.saving || !rename.title.trim() }, rename.saving ? '保存中…' : '保存'),
+      h('button', { className: 'dsg-btn', type: 'button', disabled: rename.saving, onClick: function () { setRename(null) } }, '取消'),
+      rename.error ? h('span', { className: 'dsg-rename-error', role: 'status' }, rename.error) : null) : null
+
+      const toolbar = h('div', { className: 'dsg-bar' }, buttons)
 
       return h('div', { className: 'dsg-root' },
         versionBar,
+        renameForm,
         toolbar,
-        compare
-          ? h('div', { className: 'dsg-bar' },
-            h('span', { className: 'dsg-title' }, '并排对比'),
-            h('span', { className: 'dsg-spacer' }),
-            buttons,
-          )
-          : null,
         control.error ? h('div', { className: 'dsg-note', role: 'status' }, control.error) : null,
         bindingError ? h('div', { className: 'dsg-note', role: 'status' }, bindingError) : null,
         documents.status === 'error' && designs.length > 0 ? h('div', { className: 'dsg-note', role: 'status' }, documents.error) : null,
@@ -757,7 +759,7 @@ window.__ModuleLoader__.load({
             h('div', { className: 'dsg-row' },
               h('span', null, '已选中'),
               h('span', { className: 'dsg-mono' }, '<' + selection.tag + '>'),
-              h('span', { className: 'dsg-tag' }, selection.name + (selection.revision ? ' · r' + selection.revision : '')),
+              h('span', { className: 'dsg-tag' }, designTitle(selection.name) + (selection.revision ? ' · r' + selection.revision : '')),
               h('span', { className: 'dsg-spacer' }),
               h('button', {
                 type: 'button',

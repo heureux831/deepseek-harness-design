@@ -68,8 +68,9 @@ async function main() {
   }
   const clickPreview = () => frameEv("(function(){var el=document.querySelector('h2')||document.body; el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); return true})()")
   const inspectMode = () => frameEv("document.documentElement.getAttribute('data-dsh-inspect')")
-  const shot = async (name) => {
-    const s = await send('Page.captureScreenshot', { format: 'png' })
+  const shot = async (name, selector) => {
+    const clip = selector ? await ev(`(function(){var r=document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,scale:1};})()`) : undefined
+    const s = await send('Page.captureScreenshot', { format: 'png', ...(clip ? {clip} : {}) })
     if (s && s.data) fs.writeFileSync(OUT_DIR + '/' + name + '.png', Buffer.from(s.data, 'base64'))
   }
 
@@ -98,6 +99,12 @@ async function main() {
     })()`)
     return clicked
   }
+
+  const pick = (label, value, index = 0) => ev(`(function(){
+    var el=document.querySelectorAll('select[aria-label="'+${JSON.stringify(label)}+'"]')[${index}];
+    if(!el) return false;
+    el.value=${JSON.stringify(String(value))}; el.dispatchEvent(new Event('change',{bubbles:true})); return true;
+  })()`)
 
   await clickBy("function(b){return b.textContent.trim()==='继续'}", 'dismiss notice')
   await clickBy("function(b){return b.textContent.trim()==='稍后配置'}", 'defer API key')
@@ -129,12 +136,12 @@ async function main() {
   const payload = JSON.stringify({
     session: sid,
     branches: [
-      { name: 'A', revisions: [
-        "<div style='font:16px/1.6 system-ui;padding:28px'><h2>方案 A</h2><p>第一版</p></div>",
-        "<div style='font:16px/1.6 system-ui;padding:28px'><h2>方案 A</h2><p>第二版</p></div>",
-        "<div style='font:16px/1.6 system-ui;padding:28px'><h2>方案 A</h2><p>第三版</p></div>",
+      { name: 'A', title: '暖白咖啡首页', revisions: [
+        "<div style='font:16px/1.6 system-ui;padding:28px'><h2>暖白咖啡首页</h2><p>第一版</p></div>",
+        "<div style='font:16px/1.6 system-ui;padding:28px'><h2>暖白咖啡首页</h2><p>第二版</p></div>",
+        "<div style='font:16px/1.6 system-ui;padding:28px'><h2>暖白咖啡首页</h2><p>第三版</p></div>",
       ] },
-      { name: 'B', revisions: ["<div style='font:16px/1.6 system-ui;padding:28px'><h2>方案 B</h2><p>另一条路线</p></div>"] },
+      { name: 'B', title: '深色编辑风', revisions: ["<div style='font:16px/1.6 system-ui;padding:28px'><h2>深色编辑风</h2><p>另一条路线</p></div>"] },
     ],
   })
   const seeded = await ev("fetch('/designer/dev/seed',{method:'POST',headers:{'content-type':'application/json'},body:" + JSON.stringify(payload) + "}).then(function(r){return r.json()}).then(function(v){return v.ok})")
@@ -151,33 +158,33 @@ async function main() {
   const forged = await ev("fetch('/designer/meta?session=" + sid + "&name=b').then(r=>r.json()).then(v=>v.hasSelection)")
   check('04d 沙箱脚本的简单 POST 不能伪造点选', forged === false)
 
-  const caps = await ev("(function(){return [...document.querySelectorAll('.dsg-ver')].map(function(b){return b.textContent.trim()})})()")
+  const caps = await ev("(function(){return [...document.querySelector('select[aria-label=方案]').options].map(function(o){return o.value})})()")
   check('05 面板自动跟到种子（轮询生效）', Array.isArray(caps) && caps.indexOf('b') >= 0 && caps.indexOf('a') >= 0, JSON.stringify(caps))
   check('05a 首稿出现后指南自动切换为预览', await ev("!document.querySelector('.dsg-welcome') && !!document.querySelector('.dsg-frame')") === true)
 
-  const shownBranch = await ev("(function(){var on=[...document.querySelectorAll('.dsg-ver')].find(function(b){return b.getAttribute('data-on')==='1'}); return on?on.textContent.trim():null})()")
+  const shownBranch = await ev("document.querySelector('select[aria-label=方案]')?.value")
   check('07 默认停在某个方案上', shownBranch === 'a' || shownBranch === 'b', String(shownBranch))
 
   // Drive the branch that actually carries the revision chain.
-  await ev("(function(){var v=[...document.querySelectorAll('.dsg-ver')].find(function(b){return b.textContent.trim()==='a'}); if(v)v.click(); return !!v})()")
+  await pick('方案', 'a')
   await wait(2200)
   const onA = { p: await frameEv("document.querySelector('p')?.textContent"), src: await ev("document.querySelector('.dsg-frame')?.getAttribute('src')") }
   check('07b 切到方案 a 显示其最新修订', onA && onA.p === '第三版', JSON.stringify(onA))
 
   for (const [label, width] of [['手机', 390], ['平板', 834], ['桌面', 1280]]) {
-    await clickBy(`function(b){return b.textContent.trim()==='${label}'}`)
+    await clickBy(`function(b){return b.getAttribute('aria-label')==='${label}'}`)
     await wait(350)
     const actual = await frameEv('window.innerWidth')
     check('07c ' + label + '使用实际视口宽度', actual === width, 'width=' + actual)
   }
-  await clickBy("function(b){return b.textContent.trim()==='自适应'}")
+  await clickBy("function(b){return b.getAttribute('aria-label')==='自适应'}")
   await wait(350)
 
-  const revCaps = await ev("(function(){return [...document.querySelectorAll('.dsg-ver')].map(function(b){return b.textContent.trim()}).filter(function(t){return /^r\\d+$/.test(t)})})()")
+  const revCaps = await ev("[...document.querySelector('select[aria-label=修订]').options].map(o=>o.value)")
   check('06 修订链出现（r3/r2/r1）', Array.isArray(revCaps) && revCaps.length >= 3, JSON.stringify(revCaps))
 
   // Switch to r1 and confirm BOTH the url and the rendered content follow.
-  await ev("(function(){var v=[...document.querySelectorAll('.dsg-ver')].find(function(b){return b.textContent.trim()==='r1'}); if(v)v.click(); return !!v})()")
+  await pick('修订', 1)
   await wait(2000)
   const afterRev = { p: await frameEv("document.querySelector('p')?.textContent"), src: await ev("document.querySelector('.dsg-frame')?.getAttribute('src')") }
   check('08 切到 r1：内容真的回退', afterRev && afterRev.p === '第一版', JSON.stringify(afterRev))
@@ -192,13 +199,13 @@ async function main() {
   check('11 两栏各有方案+修订两行', cmp && cmp.heads === 4, 'heads=' + (cmp && cmp.heads))
   check('12 位置标记不再与分支名撞车', !!(cmp && cmp.captions.includes('左') && cmp.captions.includes('右')), JSON.stringify(cmp && cmp.captions))
   await wait(2000)
-  const staggered = await ev("(function(){var sides=[...document.querySelectorAll('.dsg-side')]; return sides.map(function(s){var on=[...s.querySelectorAll('.dsg-ver')].filter(function(b){return b.getAttribute('data-on')==='1'}).map(function(b){return b.textContent.trim()}); return on.join('+')})})()")
+  const staggered = await ev("[...document.querySelectorAll('.dsg-side')].map(s=>[...s.querySelectorAll('select')].map(p=>p.value).join('+'))")
   check('10b 对比两侧自动错开（不自己比自己）', Array.isArray(staggered) && staggered.length === 2 && staggered[0] !== staggered[1], JSON.stringify(staggered))
-  await clickBy("function(b){return b.textContent.trim()==='平板'}")
+  await clickBy("function(b){return b.getAttribute('aria-label')==='平板'}")
   await wait(350)
   const compareWidths = [await frameEv('window.innerWidth', 0), await frameEv('window.innerWidth', 1)]
   check('10c 对比两侧都使用所选视口宽度', compareWidths.every(width => width === 834), JSON.stringify(compareWidths))
-  await clickBy("function(b){return b.textContent.trim()==='自适应'}")
+  await clickBy("function(b){return b.getAttribute('aria-label')==='自适应'}")
   await wait(350)
   await shot('31-compare')
 
@@ -208,7 +215,7 @@ async function main() {
   const sel = await ev("(function(){var s=document.querySelector('.dsg-sel'); return s?s.innerText.replace(/\\n+/g,' | ').slice(0,120):null})()")
   check('13 点选卡片确认 Host 已记录', typeof sel === 'string' && sel.includes('点选已记录') && !sel.includes('已告知模型'), sel)
 
-  const selName = await ev("(function(){var m=document.querySelector('.dsg-sel')?document.querySelector('.dsg-sel').innerText:''; if(m.indexOf('方案 B')>=0) return 'b'; if(m.indexOf('方案 A')>=0) return 'a'; return null})()")
+  const selName = await ev("new URL(document.querySelector('.dsg-frame').src).searchParams.get('name')")
   const hostSel = await ev("fetch('/designer/meta?session=" + sid + "&name=" + selName + "').then(function(r){return r.json()}).then(function(v){return v.hasSelection})")
   check('14 host 侧确实收到了选中', hostSel === true, 'design=' + selName + ' hasSelection=' + hostSel)
 
@@ -240,7 +247,7 @@ async function main() {
   const straySel = await hasSelection(probe)
   check('17c 拒收之后 Host 里仍然是空的', straySel === false, 'hasSelection=' + straySel)
 
-  await ev("(function(){var v=[...document.querySelectorAll('.dsg-ver')].find(function(b){return b.textContent.trim()==='b'}); if(v)v.click(); return !!v})()")
+  await pick('方案', 'b')
   await wait(3000)
   const offAfterSwitch = { btn: await ev("[...document.querySelectorAll('.dsg-btn')].find(x=>x.textContent.trim()==='点选')?.getAttribute('data-on')"), doc: await inspectMode(), name: await frameBranch() }
   check('16b 切方案后点选仍为关（工具栏与预览一致）',
@@ -293,6 +300,20 @@ async function main() {
   check('19c 单栏下重新开启点选，点击照常绑定', singleBound === true, 'hasSelection(' + p3 + ')=' + singleBound)
   await shot('33-single-rebind')
 
+  // Renaming metadata must preserve the rendered prototype and element binding.
+  await frameEv("window.__designPreservedState='rename-keep'")
+  await clickBy("b=>b.getAttribute('aria-label')==='重命名方案'")
+  await ev(`(function(){var input=document.querySelector('input[aria-label="方案名称"]');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'极简咖啡首页');
+    input.dispatchEvent(new Event('input',{bubbles:true}));})()`)
+  await wait(150)
+  await ev("document.querySelector('.dsg-rename').requestSubmit()")
+  await wait(1800)
+  const renamed = await ev("document.querySelector('select[aria-label=方案]').selectedOptions[0].textContent")
+  check('19d 中文重命名保留原型状态和点选', renamed === '极简咖啡首页'
+    && await frameEv('window.__designPreservedState') === 'rename-keep' && await hasSelection(p3) === true, renamed)
+  await shot('34-renamed')
+
   // Mount a real second Session through the test-only provider; no model call is needed.
   const sid2 = 'designer-e2e-other-' + Date.now()
   const secondSeed = JSON.stringify({ session: sid2, branches: [], createSession: true })
@@ -311,6 +332,30 @@ async function main() {
   await wait(2200)
   const singleComparison = await ev("[...document.querySelectorAll('.dsg-frame')].map(f=>new URL(f.src).searchParams.get('rev'))")
   check('22 只有一个方案时自动比较当前与历史修订', singleComparison?.length === 2 && singleComparison[0] !== singleComparison[1], JSON.stringify(singleComparison))
+
+  await clickBy("b=>b.textContent.trim()==='对比中'")
+  const crowded = JSON.stringify({session:sid,branches:Array.from({length:32},(_,index)=>({
+    name:'design-'+index, title:'咖啡首页 · 风格 '+(index+1),
+    revisions:index===0?Array.from({length:41},(_,r)=>'<h2>修订 '+(r+1)+'</h2>'):['<h2>咖啡首页</h2>']
+  }))})
+  await ev("fetch('/designer/dev/seed',{method:'POST',headers:{'content-type':'application/json'},body:"+JSON.stringify(crowded)+"}).then(r=>r.json())")
+  await wait(1800)
+  await pick('方案', 'design-0')
+  await wait(1800)
+  await ev("document.querySelector('.dsg-root').style.width='320px'")
+  const compact = await ev(`(function(){var root=document.querySelector('.dsg-root'),head=root.querySelector('.dsg-header');
+    return {branches:root.querySelector('select[aria-label=方案]').options.length,
+      revisions:root.querySelector('select[aria-label=修订]').options.length,
+      fits:head.scrollWidth<=head.clientWidth,buttons:root.querySelectorAll('button').length,
+      toolbarRows:root.querySelector('.dsg-device').parentElement.getBoundingClientRect().height};})()`)
+  check('23 32 个方案、41 个修订在 320px 侧栏不堆叠', compact?.branches===32 && compact?.revisions===41
+    && compact?.fits===true && compact?.buttons<12 && compact?.toolbarRows<60, JSON.stringify(compact))
+  await shot('35-compact-many-designs', '.dsg-root')
+  await clickBy("b=>b.textContent.trim()==='对比'")
+  await wait(1800)
+  const narrowCompare = await ev("document.querySelector('.dsg-device').parentElement.getBoundingClientRect().height < 60 && [...document.querySelectorAll('.dsg-sidehead')].every(h=>h.scrollWidth<=h.clientWidth)")
+  check('24 窄侧栏对比模式也保持紧凑', narrowCompare === true)
+  await shot('36-compact-compare', '.dsg-root')
 
   const fatal = consoleErrors.filter((e) => e.includes('viewingOld') || e.includes("crashed in 'sidebar.right.pane.tab'")
     || e.includes('DesignBody'))

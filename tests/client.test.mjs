@@ -4,7 +4,6 @@ import { readFile } from 'node:fs/promises'
 import { runInThisContext } from 'node:vm'
 import { JSDOM } from 'jsdom'
 import React, { act } from 'react'
-import { createRoot } from 'react-dom/client'
 
 const source = await readFile(new URL('../client.js', import.meta.url), 'utf8')
 const deferred = () => { let resolve, reject; const promise = new Promise((a,b) => { resolve=a; reject=b }); return { promise, resolve, reject } }
@@ -15,6 +14,7 @@ async function panel(t, options = {}) {
   const globals = { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true }
   const originals = new Map(Object.keys(globals).concat('fetch').map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]))
   for (const [key,value] of Object.entries(globals)) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value })
+  const { createRoot } = await import('react-dom/client')
   let slot, plugin, root, sid = 'a', currentInspect = true
   const intervals = new Set(), disposers = [], calls = []
   const data = { designs: options.empty ? [] : [{ name: 'a', version: 3, bytes: 10, updatedAt: 3 }, { name: 'b', version: 2, bytes: 10, updatedAt: 1 }],
@@ -31,7 +31,8 @@ async function panel(t, options = {}) {
     const handled = options.fetch?.(call, data)
     if (handled !== undefined) return handled
     if (url.pathname === '/designer/designs') return response({ designs: data.designs })
-    if (url.pathname === '/designer/rev') return response({ token: data.designs.map(x => x.name+'@'+x.version).join('|'), count: data.designs.length })
+    if (url.pathname === '/designer/rev') return response({ token: JSON.stringify(data.designs.map(x => [x.name,x.version,x.title])), count: data.designs.length })
+    if (url.pathname === '/designer/rename') { data.designs.find(x => x.name === body.name).title = body.title; return response({ ok: true }) }
     if (url.pathname === '/designer/revisions') return response(data.revisions[url.searchParams.get('name')])
     if (url.pathname === '/designer/inspect') {
       if (body) currentInspect = body.on
@@ -53,9 +54,12 @@ async function panel(t, options = {}) {
     for (const [key,descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis,key,descriptor); else delete globalThis[key] }
   })
   const click = async (label, index = 0) => {
-    const element = [...dom.window.document.querySelectorAll('button')].filter(x => x.textContent.trim() === label)[index]
-    assert.ok(element, 'missing button: '+label)
-    await act(async () => element.click())
+    const element = [...dom.window.document.querySelectorAll('button')].filter(x => x.textContent.trim() === label || x.getAttribute('aria-label') === label)[index]
+    if (element) { await act(async () => element.click()); return }
+    const choice = [...dom.window.document.querySelectorAll('select')].flatMap(select => [...select.options].map(option => ({ select, option })))
+      .filter(x => x.option.value === label || x.option.textContent === label || (/^r\d+$/.test(label) && x.option.value === label.slice(1)))[index]
+    assert.ok(choice, 'missing control: '+label)
+    await act(async () => { choice.select.value = choice.option.value; choice.select.dispatchEvent(new dom.window.Event('change', { bubbles: true })) })
   }
   const pulse = async () => { await act(async () => { for (const fn of [...intervals]) await fn() }) }
   const select = async (id, name = 'a', revision = 3) => {
@@ -63,7 +67,12 @@ async function panel(t, options = {}) {
     await act(async () => dom.window.dispatchEvent(new dom.window.MessageEvent('message', { source: frame.contentWindow,
       data: { source: 'dsh-designer', kind: 'select', name, revision, value: { tag: 'button', id, selector: '#'+id, text: id } } })))
   }
-  return { dom, document: dom.window.document, data, calls, ctx, click, pulse, select, render,
+  const typeTitle = async title => { await act(async () => {
+    const input = dom.window.document.querySelector('input[aria-label="方案名称"]')
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, title)
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+  }) }
+  return { dom, document: dom.window.document, data, calls, ctx, click, pulse, select, render, typeTitle,
     async settle(fn) { await act(async () => fn()) },
     get text() { return dom.window.document.body.textContent },
     get frame() { return dom.window.document.querySelector('.dsg-frame') },
@@ -91,8 +100,9 @@ test('a late revision response cannot overwrite a newly selected branch', async 
   await h.click('b')
   assert.match(h.frame.src, /name=b/)
   await h.settle(() => held.resolve(response({ name: 'a', current: 7, revisions: [{ version: 6 }] })))
-  assert.equal([...h.document.querySelectorAll('.dsg-ver')].some(x => x.textContent === 'r7'), false)
-  assert.match(h.document.querySelector('.dsg-title').textContent, /b · r2/)
+  assert.equal([...h.document.querySelectorAll('option')].some(x => x.textContent === 'r7'), false)
+  assert.equal(h.document.querySelector('select[aria-label="方案"]').value, 'b')
+  assert.equal(h.document.querySelector('select[aria-label="修订"]').value, '2')
 })
 
 test('switching alternatives exits the previous alternative historical revision', async t => {
@@ -115,7 +125,7 @@ test('a failed revision load retries and removed history falls back to the lates
   fail = false
   await h.pulse(); await h.pulse()
   assert.equal(new URL(h.frame.src).searchParams.get('rev'), null, 'an evicted revision must not stay as an empty historical preview')
-  assert.match(h.document.querySelector('.dsg-title').textContent, /r44/)
+  assert.equal(h.document.querySelector('select[aria-label="修订"]').value, '44')
 })
 
 test('late failure of an older click does not hide the success receipt for the newest click', async t => {
@@ -233,4 +243,33 @@ test('one-alternative comparison waits for history and shows two different retai
   const frames = [...h.document.querySelectorAll('.dsg-frame')]
   assert.equal(frames.length, 2)
   assert.notEqual(new URL(frames[0].src).searchParams.get('rev'), new URL(frames[1].src).searchParams.get('rev'))
+})
+
+test('32 alternatives and long history stay inside two bounded pickers', async t => {
+  const h = await panel(t)
+  h.data.designs = Array.from({ length: 32 }, (_, index) => ({ name: index ? 'design-'+index : 'a', title: '设计风格 '+index, version: 41 }))
+  h.data.revisions.a = { name: 'a', current: 41, revisions: Array.from({ length: 40 }, (_, index) => ({ version: 40-index })) }
+  await h.pulse()
+  assert.equal(h.document.querySelectorAll('select').length, 2)
+  assert.equal(h.document.querySelector('select[aria-label="方案"]').options.length, 32)
+  assert.equal(h.document.querySelector('select[aria-label="修订"]').options.length, 41)
+  assert.ok(h.document.querySelectorAll('button').length < 12)
+})
+
+test('renaming preserves prototype state and the selected element; errors keep the editor open', async t => {
+  let fail = true
+  const h = await panel(t, { fetch: call => fail && call.url.pathname === '/designer/rename'
+    ? response({ message: '已有同名方案，请换一个名称。' }, 409) : undefined })
+  await h.select('buy')
+  const src = h.frame.src
+  await h.click('重命名方案')
+  await h.typeTitle('暖白咖啡首页')
+  await h.click('保存')
+  assert.match(h.text, /已有同名方案/)
+  fail = false
+  await h.click('保存'); await h.pulse()
+  assert.equal(h.data.designs[0].title, '暖白咖啡首页')
+  assert.equal(h.frame.src, src)
+  assert.ok(h.document.querySelector('.dsg-sel'))
+  assert.ok(!h.document.querySelector('.dsg-rename'))
 })

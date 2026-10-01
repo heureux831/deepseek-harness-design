@@ -19,10 +19,10 @@ npm ci
 ./release.sh
 ```
 
-首次构建生成 `dist/r1/deepseek-harness-design-0.5.5.tgz`，后续使用递增的 `rN` 目录。安装脚本输出的本地发布包：
+首次构建生成 `dist/r1/deepseek-harness-design-0.6.0.tgz`，后续使用递增的 `rN` 目录。安装脚本输出的本地发布包：
 
 ```sh
-dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.5.tgz
+dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.6.0.tgz
 # Desktop 使用 --profile desktop
 ```
 
@@ -37,7 +37,9 @@ dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.5.tgz
 3. 开启工具栏的「点选」，点击预览中的目标元素，再对模型说要如何修改。
 4. 关闭「点选」可操作原型自己的按钮和脚本。手机、平板、桌面按钮用于切换视口宽度。
 
-方案与修订是两层：要求「再出一个方向」会生成独立方案 A / B / C；继续修改 A 会追加 A1 / A2 / A3。工具栏负责切换方案和修订，原型页面无需自行添加版本切换 UI。对比模式的两栏各有自己的方案和修订选择器。
+方案按内容或风格命名，例如「暖白咖啡首页」「深色编辑风」。要求「保留暖白咖啡首页，再做一个深色编辑风的新方案」会保留两份独立稿子；继续修改同一方案会追加 r1 / r2 / r3 修订。顶部用下拉框切换方案和修订，数量增加也不会堆满工具栏。对比模式两栏可独立选择；原型页面无需自行添加版本切换 UI。
+
+点方案旁的铅笔图标可以重命名，支持 1–80 个字符的中文名称；重复名称会提示修改。重命名只更新标签，不产生修订，也保留原型交互状态和点选记录。旧稿会从 HTML 标题或原名称生成显示名称；稳定 ID、导出文件名和历史记录保持兼容。
 
 历史修订用于只读预览。让模型修改历史版本时，明确告诉它方案名与修订号，先调用 `design_read` 取回该版，再用 `design_apply` 追加新修订。
 
@@ -52,7 +54,7 @@ dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.5.tgz
 有工作目录的会话还会把当前 HTML 导出到：
 
 ```text
-<工作区>/.dsh-design/<SHA-256 会话 ID>/<方案名>.html
+<工作区>/.dsh-design/<SHA-256 会话 ID>/<方案稳定 ID>.html
 ```
 
 `design_apply` 返回 `persisted`（Harness 保存成功）和 `exported`（HTML 导出成功），二者分别报告。持久化失败返回 `ok: false`，已有稿件、版本和修订保持原状；额外 HTML 导出失败时会明确说明，已保存的稿件仍可恢复。没有工作目录的会话同样可以保存。
@@ -77,7 +79,7 @@ dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.5.tgz
 
 | 工具 | 作用 |
 |---|---|
-| `design_apply` | 用 `html` 创建/替换整份页面，或用 `oldString` + `newString` 定点修改。`asNew: true` 创建独立方案；名称冲突自动加后缀。 |
+| `design_apply` | 用 `html` 创建/替换整份页面，或用 `oldString` + `newString` 定点修改。`title` 是描述性显示名称，`name` 是稳定 ID；编辑已有方案使用 `design_list` 返回的 `name`。`asNew: true` 创建独立方案；冲突自动加后缀。 |
 | `design_list` | 列出当前会话的方案和修订链。 |
 | `design_read` | 读取某方案当前或指定 `revision` 的 HTML；`html: false` 只读元信息。 |
 | `design_selection` | 读取当前会话最近点选的元素，或用 `name` 指定方案。返回标签、文本、选择器、outerHTML 和位置。 |
@@ -97,7 +99,7 @@ npm run check
 ./release.sh
 ```
 
-`release.sh` 执行测试和语法检查，固定待打包文件后生成 `dist/rN` 快照及标准 `deepseek-harness-design-0.5.5.tgz` 发布包。它拒绝覆盖已有快照，也拒绝再次构建当前输出目录内已完成的同版本发布。重复安装应复用原 tarball；内容改动后先同步提高 `package.json` 和 `package-lock.json` 的版本号。可用 `DSG_RELEASE_DIR` 指定其他输出目录；跨目录、跨机器的版本唯一性仍需遵守发布流程。`npm pack` 的 `prepack` 同样执行 Host、React、发布回归和语法检查，正式分发请使用 `./release.sh`。
+`release.sh` 执行测试和语法检查，固定待打包文件后生成 `dist/rN` 快照及标准 `deepseek-harness-design-0.6.0.tgz` 发布包。它拒绝覆盖已有快照，也拒绝再次构建当前输出目录内已完成的同版本发布。重复安装应复用原 tarball；内容改动后先同步提高 `package.json` 和 `package-lock.json` 的版本号。可用 `DSG_RELEASE_DIR` 指定其他输出目录；跨目录、跨机器的版本唯一性仍需遵守发布流程。`npm pack` 的 `prepack` 同样执行 Host、React、发布回归和语法检查，正式分发请使用 `./release.sh`。
 
 每份完整快照还包含包外的 `BUILD.json`，记录 tarball 的 SHA-256、包内文件哈希、源码提交和工作区是否有改动。核对版本时可据此比对源码、tarball 和已安装文件。进程启动晚于安装只能作为辅助线索，不能单独证明正在使用哪个 profile、包路径或浏览器 bundle。
 

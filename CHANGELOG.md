@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0 — Compact controls and descriptive alternative names
+
+- Replace growing alternative and revision button lists with bounded dropdowns. Group viewport icons and use quieter, accessible selection / comparison controls.
+- Support descriptive titles in the user's language, infer readable labels for older drafts, and guide model tools away from A/B/C naming. Keep stable IDs, export paths, and revision history compatible.
+- Add persisted inline renaming with duplicate-title and save-failure feedback. Renaming preserves the loaded prototype and selected element without creating a revision.
+- Cover Chinese titles, restoration, rename rollback, stale requests, and 32 alternatives with 40 historical revisions in unit and real-browser checks.
+
 ## 0.5.5 — Portable release entry and local metadata
 
 - Resolve both CLI and module paths through realpath, so invoking `release.sh` through a symbolic link (including macOS `/tmp`) executes the build instead of exiting successfully without an artifact.
