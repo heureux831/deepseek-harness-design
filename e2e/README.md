@@ -1,13 +1,13 @@
 # Designer 独立实例回归
 
-Host 的单元回归用 `npm test` 执行。以下检查使用实际安装的 Harness 和 Chrome，包含发布 tarball 安装、预览隔离、点选和修订切换。
+Host 回归和真实 React / JSDOM 生命周期回归用 `npm test` 执行，包括加载重试、请求乱序、会话切换、点选同步和历史恢复。以下检查使用实际安装的 Harness 和 Chrome，包含发布 tarball 安装、预览隔离、点选和修订切换。
 
 ## 浏览器回归
 
 先运行 `./release.sh`，把生成的 tarball 传给：
 
 ```sh
-./e2e/run.sh /absolute/path/deepseek-harness-design-0.5.2.tgz
+./e2e/run.sh /absolute/path/deepseek-harness-design-0.5.3.tgz
 ```
 
 脚本需要 macOS 上的 `/Applications/DeepSeek Harness.app` 和 `/Applications/Google Chrome.app`。通过 `DSG_HARNESS_APP` 可调整 Harness app 路径；`DSG_E2E_PORT` 和 `DSG_E2E_CDP` 可调整默认的 19401 / 19501 端口。
@@ -22,7 +22,7 @@ dsh --profile web --patch ./test-seed.patch.yml --no-open --port 19401
 
 `e2e.cjs` 与 `cdp.cjs` 是 CommonJS，可直接在本包的 `type: module` 下运行，无需复制到包外。
 
-覆盖应用启动、面板挂载、opaque-origin 沙箱和响应 CSP、轮询刷新、方案/历史修订切换、两栏对比、点选回传、关开开关、在途点击拒收和重新绑定。
+覆盖应用启动、面板挂载、opaque-origin 沙箱和响应 CSP、轮询刷新、方案/历史修订切换、两栏对比、单栏和对比的实际视口宽度、单方案历史对比、点选回传、关开开关、在途点击拒收和重新绑定。
 
 `POST /designer/dev/seed` 仅由 `test-seed/index.js` 注册。正式 tarball 没有测试插件，也不会注册这条路由。
 

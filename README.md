@@ -18,7 +18,7 @@ This project is independently maintained and is not affiliated with DeepSeek.
 ## Requirements
 
 - A DeepSeek Harness Web or Desktop profile providing `tools`, `fs`, `webServer`, `systemPrompt`, `storageDomain`, `sessions`, and `sessionPersistence`.
-- Node.js **22 or later** for development.
+- Node.js **22.12+ (22.x) or 24+** for development and tests. The Host runtime requires Node.js 22+.
 
 The plugin has been tested with **DeepSeek Harness Desktop 0.2.0-rc.2**, using its Web profile. Compatibility with other Harness versions has not been verified.
 
@@ -33,10 +33,10 @@ npm ci
 ./release.sh
 ```
 
-The first build produces `dist/r1/deepseek-harness-design-0.5.2.tgz`; later builds use the next `rN` directory. Install the printed tarball path:
+The first build produces `dist/r1/deepseek-harness-design-0.5.3.tgz`; later builds use the next `rN` directory. Install the printed tarball path:
 
 ```sh
-dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.2.tgz
+dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.3.tgz
 # For the Desktop profile, use --profile desktop.
 ```
 
@@ -60,7 +60,11 @@ Request another direction to create an alternative. Further edits append revisio
 
 Historical revisions are read-only previews. To edit from one, tell the model its alternative name and revision number so it can read that version and append a new revision.
 
+Phone, tablet, and desktop use actual 390 / 834 / 1280 px viewport widths in either view; scroll horizontally when a sidebar is narrower. Loading errors show a retry message instead of the welcome guide. Document and revision requests retry automatically; the refresh button restarts document loading.
+
 The selection receipt means the Host recorded the click. It does **not** mean the model has already read or acted on it. Selection is scoped to the current session, expires after ten minutes, and is marked delivered only when its prompt enters that session's context snapshot.
+
+Reopening Design restores the session's inspect switch and retained selection receipt. Changing the displayed alternative, revision, or comparison mode clears the binding; a successful edit to the selected alternative also clears it. Inspect toggles preserve prototype state. A failed switch or clear shows its synchronization state and retries automatically. Stale clicks are rejected, and a historical click includes its revision number. An unnamed edit targets the selected alternative, otherwise the most recently edited one.
 
 ## Storage and recovery
 
@@ -79,6 +83,8 @@ When a session has a workspace, the latest HTML is also exported to:
 Exports use the current session's standing sandbox policy, resolved through `sandboxPolicy` when a sandboxed filesystem is mounted. In `workspace-write` mode, the session workspace is the write boundary; in `read-only` mode, Harness drafts can still persist but HTML exports are denied. The plugin does not request a wider mode.
 
 The storage domain and export path retain their original names for compatibility. Existing session-hashed HTML exports are imported without rewriting the originals. Only their latest HTML can be recovered; old revisions and drafts that existed only in the previous process's memory cannot be migrated.
+
+Legacy import requires valid UTF-8, at most 32 eligible HTML files, and at most 400,000 characters per file. An invalid import stops before saving any imported draft and leaves source files intact. Correct the file named in `design_apply`'s restoration error (or move excess files out of that session's import directory), then retry. Evicted history returns `found: false` from `design_read`; the panel falls back to the latest revision.
 
 ## Model tools
 
@@ -104,7 +110,7 @@ npm run check
 ./release.sh
 ```
 
-`npm pack` runs the Host tests and JavaScript syntax checks through `prepack`. The release script builds an immutable snapshot in `dist/rN` and refuses to overwrite one. Set `DSG_RELEASE_DIR` to choose another output directory.
+`npm pack` runs Host and React tests and JavaScript syntax checks through `prepack`. The release script builds an immutable snapshot in `dist/rN` and refuses to overwrite one. Set `DSG_RELEASE_DIR` to choose another output directory.
 
 The distributable contains the Host, browser entry point, locales, bundle patch, both README files, and MIT license. Test fixtures and the test-only seed route are excluded.
 

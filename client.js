@@ -62,7 +62,8 @@ window.__ModuleLoader__.load({
       '.dsg-sidehead{display:flex;align-items:center;gap:6px;padding:5px 8px;flex:none;flex-wrap:wrap}',
       '.dsg-sidehead + .dsg-sidehead{border-top:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.05));padding-top:4px;padding-bottom:4px}',
       '.dsg-tag{font-size:11px;font-weight:600;color:var(--dsw-alias-label-tertiary,#999);letter-spacing:.04em}',
-      '.dsg-sidebody{flex:1;min-height:0;padding:8px;background:var(--dsw-alias-bg-l2,rgba(0,0,0,.04));display:flex}',
+      '.dsg-sidebody{flex:1;min-height:0;overflow:auto;padding:8px;background:var(--dsw-alias-bg-l2,rgba(0,0,0,.04));display:flex}',
+      '.dsg-sidebody .dsg-holder{min-height:0}',
       '.dsg-sidebody .dsg-frame{min-height:0;height:100%}',
     ].join('\n')
 
@@ -86,27 +87,57 @@ window.__ModuleLoader__.load({
       return function () { tag.remove() }
     }
 
-    /** Every alternative this session holds, for the pickers. */
-    function useDesigns(sessionId, ctx, tick) {
-      const state = React.useState([])
-      const designs = state[0]
-      const setDesigns = state[1]
-      const load = React.useCallback(function () {
-        if (sessionId === '') return
-        fetch('/designer/designs?session=' + q(sessionId), { cache: 'no-store' })
-          .then(function (response) { return response.json() })
-          .then(function (value) { setDesigns(Array.isArray(value.designs) ? value.designs : []) })
-          .catch(function () { /* try again on the next tick */ })
-      }, [sessionId])
-      React.useEffect(function () { load() }, [load, tick])
-      return designs
+    async function requestJson(url, options) {
+      const settings = Object.assign({ cache: 'no-store' }, options)
+      const timeout = AbortSignal.timeout(10000)
+      settings.signal = settings.signal ? AbortSignal.any([settings.signal, timeout]) : timeout
+      const response = await fetch(url, settings)
+      if (!response.ok) throw new Error('HTTP ' + response.status)
+      return response.json()
+    }
+
+    /** Commit metadata and its list together; a failed list must not consume the token. */
+    function useDocuments(sessionId, ctx, changed, refresh) {
+      const state = React.useState({ designs: [], status: 'loading', error: '' })
+      React.useEffect(function () {
+        if (sessionId === '') return undefined
+        let active = true, pending = false, committedToken, hadError = false
+        const controller = new AbortController()
+        async function load() {
+          if (pending) return
+          pending = true
+          try {
+            const meta = await requestJson('/designer/rev?session=' + q(sessionId), { signal: controller.signal })
+            if (typeof meta.token !== 'string') throw new Error('Invalid design metadata')
+            if (committedToken !== meta.token) {
+              const value = await requestJson('/designer/designs?session=' + q(sessionId), { signal: controller.signal })
+              if (!Array.isArray(value.designs)) throw new Error('Invalid design list')
+              if (!active) return
+              committedToken = meta.token
+              state[1]({ designs: value.designs, status: 'ready', error: '' })
+              changed()
+            } else if (active && hadError) {
+              state[1](function (previous) { return Object.assign({}, previous, { status: 'ready', error: '' }) })
+            }
+            hadError = false
+          } catch (error) {
+            if (!active) return
+            hadError = true
+            state[1](function (previous) { return Object.assign({}, previous, { status: 'error', error: '暂时无法读取会话稿件，正在自动重试。也可以点击「刷新」。' }) })
+          } finally { pending = false }
+        }
+        load()
+        const stop = ctx.timer.interval(load, POLL_MS)
+        return function () { active = false; controller.abort(); stop() }
+      }, [sessionId, ctx, changed, refresh])
+      return state[0]
     }
 
     function DesignBody(props) {
       const sessionId = String(props.sessionId || '')
-      const metaState = React.useState({ version: 0, token: '', count: 0 })
-      const meta = metaState[0]
-      const setMeta = metaState[1]
+      const refreshState = React.useState(0)
+      const refresh = refreshState[0]
+      const setRefresh = refreshState[1]
       const bumpState = React.useState(0)
       const bump = bumpState[0]
       const setBump = bumpState[1]
@@ -121,20 +152,19 @@ window.__ModuleLoader__.load({
       const setSelection = selectionState[1]
       // Each pane owns its own revision chain: the compare view shows two
       // INDEPENDENT branches, so one shared chain was wrong by construction.
-      const singleRevState = React.useState({ current: 0, revisions: [], shown: 0 })
+      const singleRevState = React.useState({ name: '', current: 0, revisions: [], shown: 0 })
       const singleRev = singleRevState[0]
       const setSingleRev = singleRevState[1]
-      const leftRevState = React.useState({ current: 0, revisions: [], shown: 0 })
+      const leftRevState = React.useState({ name: '', current: 0, revisions: [], shown: 0 })
       const leftRev = leftRevState[0]
       const setLeftRev = leftRevState[1]
-      const rightRevState = React.useState({ current: 0, revisions: [], shown: 0 })
+      const rightRevState = React.useState({ name: '', current: 0, revisions: [], shown: 0 })
       const rightRev = rightRevState[0]
       const setRightRev = rightRevState[1]
 
       // Whether the single pane is showing a historical revision. Declared here,
       // above every reader: the canvas, the revision row, and the toolbar all
       // depend on it, and `const` does not hoist.
-      const viewingOld = singleRev.shown > 0 && singleRev.shown !== singleRev.current
       const deliveryState = React.useState('idle')
       const delivery = deliveryState[0]
       const setDelivery = deliveryState[1]
@@ -147,41 +177,41 @@ window.__ModuleLoader__.load({
       const rightState = React.useState('')
       const right = rightState[0]
       const setRight = rightState[1]
-      const tokenRef = React.useRef('')
+      const viewingOld = singleRev.name === left && singleRev.shown > 0 && singleRev.shown !== singleRev.current
       const frameRefs = React.useRef(new Set())
       const comparePrimed = React.useRef(false)
-      const inspectRef = React.useRef(inspect)
-      inspectRef.current = inspect
-
-      // Poll for any change across the session's alternatives; the iframes are
-      // only re-pointed when the token actually moves, so an open prototype is
-      // never interrupted mid-interaction.
-      const tick = React.useCallback(function () {
-        if (sessionId === '') return
-        fetch('/designer/rev?session=' + q(sessionId), { cache: 'no-store' })
-          .then(function (response) { return response.json() })
-          .then(function (value) {
-            if (tokenRef.current === value.token) return
-            tokenRef.current = value.token
-            setMeta({ version: value.version, token: value.token, count: value.count })
-            setBump(function (count) { return count + 1 })
-          })
-          .catch(function () { /* the host may be between restarts; retry next tick */ })
-      }, [sessionId])
-
-      const designs = useDesigns(sessionId, props.ctx, bump)
-
-      React.useEffect(function () { tick() }, [tick])
-
+      const controlState = React.useState({ synced: false, error: '' })
+      const control = controlState[0], setControl = controlState[1]
+      const bindingErrorState = React.useState('')
+      const bindingError = bindingErrorState[0], setBindingError = bindingErrorState[1]
+      const inspectRef = React.useRef(false)
+      inspectRef.current = inspect && control.synced
+      const inspectToken = React.useRef('')
+      const modeRequest = React.useRef(null)
+      const syncMode = React.useRef(function () {})
+      const controlReady = React.useRef(false)
+      const selectionRef = React.useRef(null)
+      const resumeSelection = React.useRef(null)
+      const initialSelectionLoaded = React.useRef(false)
+      const deliveryRef = React.useRef(delivery)
+      deliveryRef.current = delivery
+      const actionSequence = React.useRef(0)
+      const pendingClear = React.useRef(null)
+      const alive = React.useRef(true)
+      const clientId = React.useRef('')
+      if (!clientId.current) clientId.current = window.crypto.randomUUID()
       React.useEffect(function () {
-        if (sessionId === '') return undefined
-        const stop = props.ctx.timer.interval(tick, POLL_MS)
-        return function () { stop() }
-      }, [props.ctx, sessionId, tick])
+        alive.current = true
+        return function () { alive.current = false; actionSequence.current += 1 }
+      }, [])
+
+      const changed = React.useCallback(function () { setBump(function (count) { return count + 1 }) }, [])
+      const documents = useDocuments(sessionId, props.ctx, changed, refresh)
+      const designs = documents.designs
 
       // Keep the compare pickers pointed at real alternatives.
       React.useEffect(function () {
-        if (designs.length === 0) return
+        if (designs.length === 0) { setCompare(false); setLeft(''); setRight(''); return }
         const names = designs.map(function (item) { return item.name })
         setLeft(function (current) { return names.indexOf(current) >= 0 ? current : names[0] })
         setRight(function (current) {
@@ -197,22 +227,31 @@ window.__ModuleLoader__.load({
        */
       function useRevisionChain(branch, setState) {
         React.useEffect(function () {
-          if (sessionId === '' || branch === '') return
-          fetch('/designer/revisions?session=' + q(sessionId) + '&name=' + q(branch), { cache: 'no-store' })
-            .then(function (response) { return response.json() })
-            .then(function (value) {
-              const current = value.current || 0
+          if (sessionId === '' || branch === '') return undefined
+          let active = true, pending = false, retry = true
+          const controller = new AbortController()
+          setState(function (previous) {
+            return previous.name === branch ? previous : { name: branch, current: 0, revisions: [], shown: 0 }
+          })
+          async function load() {
+            if (pending || !retry) return
+            pending = true
+            try {
+              const value = await requestJson('/designer/revisions?session=' + q(sessionId) + '&name=' + q(branch), { signal: controller.signal })
+              if (value.name !== branch || !Number.isSafeInteger(value.current) || !Array.isArray(value.revisions)) throw new Error('Invalid revision list')
+              if (!active) return
               setState(function (previous) {
-                // Follow the newest revision, unless this pane is browsing history.
-                const browsing = previous.shown > 0 && previous.shown < previous.current
-                return {
-                  current,
-                  revisions: Array.isArray(value.revisions) ? value.revisions : [],
-                  shown: browsing ? previous.shown : current,
-                }
+                const browsing = previous.name === branch && previous.shown > 0 && previous.shown < previous.current
+                  && value.revisions.some(function (item) { return item.version === previous.shown })
+                return { name: branch, current: value.current, revisions: value.revisions, shown: browsing ? previous.shown : value.current }
               })
-            })
-            .catch(function () { /* retry on the next bump */ })
+              retry = false
+            } catch (error) { /* keep the current preview and retry this branch */ }
+            finally { pending = false }
+          }
+          load()
+          const stop = props.ctx.timer.interval(load, POLL_MS)
+          return function () { active = false; controller.abort(); stop() }
         }, [sessionId, branch, bump])
       }
 
@@ -226,6 +265,7 @@ window.__ModuleLoader__.load({
       React.useEffect(function () {
         if (compare) {
           if (comparePrimed.current) return
+          if (leftRev.name !== left || rightRev.name !== right || leftRev.current === 0 || rightRev.current === 0) return
           comparePrimed.current = true
         } else {
           comparePrimed.current = false
@@ -238,9 +278,10 @@ window.__ModuleLoader__.load({
 
         const roll = function (chain) {
           if (chain.current <= 1) return false
-          const previous = chain.current - 1
+          const previous = chain.revisions.find(function (item) { return item.version !== chain.current })?.version
+          if (!previous) return false
           setRightRev(function (state) {
-            return { current: state.current, revisions: state.revisions, shown: previous }
+            return { name: state.name, current: state.current, revisions: state.revisions, shown: previous }
           })
           return true
         }
@@ -250,91 +291,174 @@ window.__ModuleLoader__.load({
         if (alternate.length > 0) setRight(alternate[0])
       }, [compare, left, right, leftRev, rightRev, designs])
 
-      // Mirror 点选 to the Host. The Host is the side that decides whether a
-      // click may reach the model, so the switch has to be known there and not
-      // only in this panel — and this also fires on mount, which re-gates a Host
-      // that kept the mode from before a page reload.
+      // Read the Host's switch on mount; reopening a tab must not re-arm it.
       React.useEffect(function () {
-        if (sessionId === '') return
-        fetch('/designer/inspect', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ session: sessionId, on: inspect }),
-        }).catch(function () { /* the panel keeps working; the Host keeps its last mode */ })
-      }, [inspect, sessionId])
+        if (sessionId === '') return undefined
+        let active = true, pending = false
+        const controller = new AbortController()
+        async function sync() {
+          if (pending || (controlReady.current && !modeRequest.current)) return
+          pending = true
+          const body = modeRequest.current
+          try {
+            const value = await requestJson('/designer/inspect' + (body ? '' : '?session=' + q(sessionId)), body
+              ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal }
+              : { signal: controller.signal })
+            if (!value.ok || typeof value.inspect !== 'boolean' || typeof value.token !== 'string') throw new Error('Invalid inspect state')
+            if (!active || modeRequest.current !== body) return
+            inspectToken.current = value.token
+            if (!body && !initialSelectionLoaded.current) {
+              initialSelectionLoaded.current = true
+              resumeSelection.current = value.selection || null
+              if (value.selection?.name) setLeft(value.selection.name)
+            }
+            modeRequest.current = null
+            controlReady.current = true
+            setInspect(value.inspect)
+            setControl({ synced: true, error: '' })
+          } catch (error) {
+            if (active) setControl({ synced: false, error: '点选状态尚未同步，已暂停点选，正在自动重试。' })
+          } finally { pending = false }
+        }
+        syncMode.current = sync
+        sync()
+        const stop = props.ctx.timer.interval(sync, POLL_MS)
+        return function () { active = false; controller.abort(); stop() }
+      }, [sessionId, props.ctx])
 
-      // Push inspect mode into every mounted preview. This is the whole point:
-      // toggling it must not reload the prototype, because the prototype has its
-      // own state (which tab of a comparison it is showing) that a reload resets.
       React.useEffect(function () {
         frameRefs.current.forEach(function (node) {
           if (!node.isConnected) return
-          try {
-            node.contentWindow.postMessage(
-              { source: 'dsh-designer-panel', kind: 'inspect', on: inspect },
-              '*',
-            )
-          } catch (error) { /* the frame is between loads; the ready handshake catches it */ }
+          try { node.contentWindow.postMessage({ source: 'dsh-designer-panel', kind: 'inspect', on: inspectRef.current }, '*') }
+          catch (error) { /* the frame's ready handshake retries the mode */ }
         })
-      }, [inspect, bump])
+      }, [inspect, control.synced, bump])
 
-      // Clicks relayed by the bridge inside a preview document.
+      function forgetSelection() {
+        resumeSelection.current = null
+        actionSequence.current += 1
+        selectionRef.current = null
+        setSelection(null)
+        setDelivery('idle')
+      }
+
+      // A clear retries on reconnect. Its action identity prevents an old retry
+      // from clearing a newer click, and late responses cannot change its receipt.
+      async function syncClear(body) {
+        try {
+          const value = await requestJson('/designer/select', {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+          })
+          if (!value.ok) throw new Error('Clear rejected')
+          if (alive.current && pendingClear.current === body) {
+            pendingClear.current = null
+            setBindingError('')
+          }
+        } catch (error) {
+          if (alive.current && pendingClear.current === body) setBindingError('清除尚未同步到会话，正在自动重试。')
+        }
+      }
+
+      function clearBinding() {
+        forgetSelection()
+        if (sessionId === '') return
+        const body = { session: sessionId, clear: true, client: clientId.current, sequence: actionSequence.current }
+        pendingClear.current = body
+        syncClear(body)
+      }
+
+      React.useEffect(function () {
+        if (selectionRef.current) clearBinding()
+      }, [left, right, compare, bump, singleRev.shown, leftRev.shown, rightRev.shown])
+
+      // Reopening a tab restores the visible receipt only after its document
+      // and revision are ready; setup changes must not clear that binding.
+      React.useEffect(function () {
+        const pick = resumeSelection.current
+        if (!pick || !control.synced || singleRev.name !== pick.name || !singleRev.current) return
+        if (!designs.some(function (entry) { return entry.name === pick.name })) { resumeSelection.current = null; return }
+        if (left !== pick.name) { setLeft(pick.name); return }
+        if (pick.revision && pick.revision !== singleRev.current) {
+          if (!singleRev.revisions.some(function (entry) { return entry.version === pick.revision })) { clearBinding(); return }
+          if (singleRev.shown !== pick.revision) {
+            setSingleRev(function (value) { return Object.assign({}, value, { shown: pick.revision }) })
+            return
+          }
+        }
+        resumeSelection.current = null
+        selectionRef.current = pick
+        setSelection(pick)
+        setDelivery(pick.delivered ? 'delivered' : 'sent')
+      }, [left, singleRev, designs, control.synced, bump])
+
+      React.useEffect(function () {
+        let active = true, pending = false
+        async function reconcile() {
+          if (pending) return
+          pending = true
+          try {
+            if (pendingClear.current) await syncClear(pendingClear.current)
+            const pick = selectionRef.current
+            if (!pick || !['sent', 'delivered'].includes(deliveryRef.current)) return
+            const sequence = actionSequence.current
+            const value = await requestJson('/designer/meta?session=' + q(sessionId) + '&name=' + q(pick.name))
+            if (!active || sequence !== actionSequence.current) return
+            if (!value.hasSelection) forgetSelection()
+            else if (value.delivered) setDelivery('delivered')
+          } catch (error) { /* retain the existing receipt until the Host can confirm it */ }
+          finally { pending = false }
+        }
+        const stop = props.ctx.timer.interval(reconcile, POLL_MS)
+        return function () { active = false; stop() }
+      }, [sessionId, props.ctx])
+
       React.useEffect(function () {
         function onMessage(event) {
           const data = event.data
           if (!data || data.source !== 'dsh-designer') return
-          if (![...frameRefs.current].some(function (node) {
-            return node.isConnected && node.contentWindow === event.source
-          })) return
+          const node = [...frameRefs.current].find(function (frame) { return frame.isConnected && frame.contentWindow === event.source })
+          if (!node) return
           if (data.kind === 'ready') {
-            // A fresh preview document booted with its own default. Overwrite it
-            // with the mode this panel is actually showing, or the toolbar and
-            // the preview disagree after every branch switch.
-            try {
-              event.source.postMessage(
-                { source: 'dsh-designer-panel', kind: 'inspect', on: inspectRef.current },
-                '*',
-              )
-            } catch (error) { /* the frame went away between announce and reply */ }
+            try { event.source.postMessage({ source: 'dsh-designer-panel', kind: 'inspect', on: inspectRef.current }, '*') }
+            catch (error) { /* the iframe navigated */ }
             return
           }
-          if (data.kind !== 'select') return
-          if (!inspectRef.current) return
-          setSelection(data.value)
+          if (data.kind !== 'select' || !inspectRef.current || !data.value || typeof data.value.tag !== 'string') return
+          const url = new URL(node.src, window.location.href)
+          if (data.name !== url.searchParams.get('name')) return
+          const displayedRevision = Number(url.searchParams.get('rev'))
+          if (!Number.isSafeInteger(data.revision) || data.revision < 1
+            || (displayedRevision > 0 && data.revision !== displayedRevision)) return
+          const sequence = ++actionSequence.current
+          resumeSelection.current = null
+          const pick = Object.assign({}, data.value, { name: data.name, revision: data.revision })
+          selectionRef.current = pick
+          pendingClear.current = null
+          setBindingError('')
+          setSelection(pick)
           setDelivery('sending')
-          fetch('/designer/select', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ session: sessionId, name: data.name, selection: data.value }),
+          requestJson('/designer/select', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ session: sessionId, name: data.name, revision: data.revision,
+              historical: displayedRevision > 0, selection: data.value,
+              inspectToken: inspectToken.current, client: clientId.current, sequence }),
+          }).then(function (value) {
+            if (!alive.current || sequence !== actionSequence.current) return
+            if (value.ok && !value.ignored) setDelivery('sent')
+            else {
+              forgetSelection()
+              setBindingError('预览或点选状态已变化，请重新点选。')
+              controlReady.current = false
+              setControl({ synced: false, error: '' })
+              syncMode.current()
+            }
+          }).catch(function () {
+            if (alive.current && sequence === actionSequence.current) setDelivery('failed')
           })
-            .then(function (response) { return response.json() })
-            .then(function (value) {
-              if (value && value.ok && !value.ignored) setDelivery('sent')
-              else {
-                setSelection(null)
-                setDelivery('failed')
-              }
-            })
-            .catch(function () { setDelivery('failed') })
         }
         window.addEventListener('message', onMessage)
         return function () { window.removeEventListener('message', onMessage) }
       }, [sessionId])
-
-      /**
-       * Unbind the selected element: drop it here AND in the Host store.
-       * 点选 is the binding switch, so switching it off has to run this — what
-       * was clicked while it was on must not reach the model afterwards.
-       */
-      function clearBinding() {
-        setSelection(null)
-        setDelivery('idle')
-        fetch('/designer/select', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ session: sessionId, clear: true }),
-        }).catch(function () { /* clearing is best-effort */ })
-      }
 
       /** One preview frame, pointed at one alternative. */
       function frame(name, label, revision) {
@@ -413,12 +537,19 @@ window.__ModuleLoader__.load({
           ? '并排对比（两个方案，或同一方案的两个修订）'
           : '还只有一版，先让模型「再来一版」或改一次',
         disabled: !canCompare,
-        onClick: function () { setCompare(function (value) { return !value }) },
+        onClick: function () {
+          if (!compare) {
+            setLeftRev(Object.assign({}, singleRev, { name: left }))
+            if (right === left) setRightRev(Object.assign({}, singleRev, { name: right, shown: singleRev.current }))
+          }
+          setCompare(function (value) { return !value })
+        },
       }, compare ? '对比中' : '对比'))
 
       buttons.push(h('button', {
         key: 'inspect',
         type: 'button',
+        disabled: sessionId === '' || !control.synced,
         className: 'dsg-btn',
         'data-on': inspect ? '1' : '0',
         title: inspect
@@ -426,10 +557,14 @@ window.__ModuleLoader__.load({
           : '点选已关闭：之前点过的元素已解除绑定，模型不会再收到它。',
         onClick: function () {
           const next = !inspect
+          forgetSelection()
+          pendingClear.current = null
+          setBindingError('')
           setInspect(next)
-          // 点选 reads as "armed / not armed", not "filter clicks": switching it
-          // off unbinds what was clicked while it was on.
-          if (!next) clearBinding()
+          controlReady.current = false
+          setControl({ synced: false, error: '' })
+          modeRequest.current = { session: sessionId, on: next, client: clientId.current, sequence: actionSequence.current }
+          syncMode.current()
         },
       }, '点选'))
 
@@ -438,13 +573,15 @@ window.__ModuleLoader__.load({
         type: 'button',
         className: 'dsg-btn',
         title: '重新载入预览',
-        onClick: function () { setBump(function (count) { return count + 1 }) },
+        onClick: function () { setRefresh(function (count) { return count + 1 }) },
       }, '刷新'))
 
-      const holderStyle = { width: width === 0 ? '100%' : width + 'px', maxWidth: '100%' }
+      const holderStyle = { width: width === 0 ? '100%' : width + 'px', flexShrink: 0 }
 
       let canvas
-      if (sessionId === '' || designs.length === 0) {
+      if (sessionId !== '' && designs.length === 0 && documents.status !== 'ready') {
+        canvas = h('div', { className: 'dsg-note', role: 'status' }, documents.status === 'error' ? documents.error : '正在读取会话稿件…')
+      } else if (sessionId === '' || designs.length === 0) {
         const steps = [
           { title: '描述你想要的界面', text: '在左侧对话里告诉模型页面用途、内容和风格。第一版生成后，会自动显示在这里。',
             example: '在 Design 里做一个咖啡店首页，暖白底色、大幅产品图、简洁导航。' },
@@ -487,11 +624,11 @@ window.__ModuleLoader__.load({
           // Each side carries BOTH rows: its own branch, and that branch's own
           // revision chain. Comparing A against B is comparing two independent
           // histories, not one shared one.
-          const items = revisionItems(pane.chain)
-          const browsing = pane.chain.shown > 0 && pane.chain.shown !== pane.chain.current
+          const items = revisionItems(pane.chain.name === pane.name ? pane.chain : { current: 0, revisions: [] })
+          const browsing = pane.chain.name === pane.name && pane.chain.shown > 0 && pane.chain.shown !== pane.chain.current
           const selectRevision = function (value) {
             pane.setChain(function (previous) {
-              return { current: previous.current, revisions: previous.revisions, shown: value }
+              return { name: previous.name, current: previous.current, revisions: previous.revisions, shown: value }
             })
           }
           return h('div', { key: pane.side, className: 'dsg-side' },
@@ -509,7 +646,7 @@ window.__ModuleLoader__.load({
                   className: 'dsg-btn',
                   onClick: function () {
                     pane.setChain(function (previous) {
-                      return { current: previous.current, revisions: previous.revisions, shown: 0 }
+                      return { name: previous.name, current: previous.current, revisions: previous.revisions, shown: 0 }
                     })
                     setBump(function (count) { return count + 1 })
                   },
@@ -517,11 +654,12 @@ window.__ModuleLoader__.load({
                 : null,
             ),
             h('div', { className: 'dsg-sidebody' },
-              frame(pane.name || 'prototype', pane.side, browsing ? pane.chain.shown : 0)),
+              h('div', { className: 'dsg-holder', style: holderStyle },
+                frame(pane.name || 'prototype', pane.side, browsing ? pane.chain.shown : 0))),
           )
         }))
       } else {
-        canvas = h('div', { className: 'dsg-canvas' },
+        canvas = h('div', { className: 'dsg-canvas', style: { justifyContent: width === 0 ? 'center' : 'flex-start' } },
           h('div', { className: 'dsg-holder', style: holderStyle },
             frame(left || 'prototype', 'single', viewingOld ? singleRev.shown : 0)),
         )
@@ -556,12 +694,12 @@ window.__ModuleLoader__.load({
         return items
       }
 
-      const singleItems = revisionItems(singleRev)
+      const singleItems = revisionItems(singleRev.name === left ? singleRev : { current: 0, revisions: [] })
       const revisionRow = versions('修订', singleItems,
         viewingOld ? singleRev.shown : singleRev.current,
         function (value) {
           setSingleRev(function (previous) {
-            return { current: previous.current, revisions: previous.revisions, shown: value }
+            return { name: previous.name, current: previous.current, revisions: previous.revisions, shown: value }
           })
         }, singleItems.length < 2)
 
@@ -579,7 +717,7 @@ window.__ModuleLoader__.load({
             title: '这一版是历史修订；让模型照它改，就会生成新的当前修订',
             onClick: function () {
               setSingleRev(function (previous) {
-                return { current: previous.current, revisions: previous.revisions, shown: 0 }
+                return { name: previous.name, current: previous.current, revisions: previous.revisions, shown: 0 }
               })
               setBump(function (count) { return count + 1 })
             },
@@ -591,7 +729,7 @@ window.__ModuleLoader__.load({
       const toolbar = compare ? null : h('div', { className: 'dsg-bar' },
         h('span', { className: 'dsg-title', title: designs.length === 0 ? '使用指南' : (left || 'prototype') },
           (designs.length === 0 ? '使用指南' : (left || 'prototype'))
-            + (singleRev.current > 0 ? ' · r' + (viewingOld ? singleRev.shown : singleRev.current) : '')),
+            + (singleRev.name === left && singleRev.current > 0 ? ' · r' + (viewingOld ? singleRev.shown : singleRev.current) : '')),
         h('span', { className: 'dsg-spacer' }),
         buttons,
       )
@@ -606,6 +744,9 @@ window.__ModuleLoader__.load({
             buttons,
           )
           : null,
+        control.error ? h('div', { className: 'dsg-note', role: 'status' }, control.error) : null,
+        bindingError ? h('div', { className: 'dsg-note', role: 'status' }, bindingError) : null,
+        documents.status === 'error' && designs.length > 0 ? h('div', { className: 'dsg-note', role: 'status' }, documents.error) : null,
         canvas,
         designs.length === 0 ? null : selection === null
           ? h('div', { className: 'dsg-note' },
@@ -616,6 +757,7 @@ window.__ModuleLoader__.load({
             h('div', { className: 'dsg-row' },
               h('span', null, '已选中'),
               h('span', { className: 'dsg-mono' }, '<' + selection.tag + '>'),
+              h('span', { className: 'dsg-tag' }, selection.name + (selection.revision ? ' · r' + selection.revision : '')),
               h('span', { className: 'dsg-spacer' }),
               h('button', {
                 type: 'button',
@@ -630,8 +772,9 @@ window.__ModuleLoader__.load({
             h('div', { className: 'dsg-note', style: { padding: '0' } },
               delivery === 'sent'
                 ? '点选已记录：下一次模型请求会收到提示，直接说「把这个改成…」即可。'
+                : delivery === 'delivered' ? '点选提示已进入会话，可以继续描述要怎么修改。'
                 : delivery === 'failed'
-                  ? '选中已记录，但回传 Host 失败——请让模型重新运行一次 Designer 包。'
+                  ? '点选尚未确认，请检查连接后重新点选。'
                   : delivery === 'sending' ? '正在把选中交给模型…' : '准备中…'),
           ),
       )

@@ -56,6 +56,7 @@ const BRIDGE = [
   '    return parts.join(" > ");',
   '  }',
   '  document.addEventListener("click", function (event) {',
+  '    if (!window.__dshDesignerSelectable) return;',
   '    if (document.documentElement.getAttribute("data-dsh-inspect") !== "on") return;',
   '    var el = event.target;',
   '    if (!el || el.nodeType !== 1) return;',
@@ -70,7 +71,7 @@ const BRIDGE = [
   '      rect: Math.round(rect.width) + "x" + Math.round(rect.height) + " at " + Math.round(rect.left) + "," + Math.round(rect.top)',
   '    };',
   '    try {',
-  '      parent.postMessage({ source: "dsh-designer", kind: "select", name: window.__dshDesignerName || "", value: payload }, "*");',
+  '      parent.postMessage({ source: "dsh-designer", kind: "select", name: window.__dshDesignerName || "", revision: window.__dshDesignerRevision, value: payload }, "*");',
   '    } catch (e) {}',
   '    try {',
   '      if (window.__dshDesignerInspect === "server") {',
@@ -100,11 +101,13 @@ const BRIDGE = [
 
 /** Compose one served preview document. */
 function composeDocument(html, options) {
-  const body = html && html.trim() !== '' ? html : PLACEHOLDER
+  const body = typeof html === 'string' ? html : PLACEHOLDER
   const inspect = options.inspect === false ? 'off' : 'on'
   const scriptJson = (value) => JSON.stringify(value).replace(/</g, '\\u003c')
   const boot = '<script>window.__dshDesignerSession=' + scriptJson(options.session)
     + ';window.__dshDesignerName=' + scriptJson(options.slug)
+    + ';window.__dshDesignerRevision=' + scriptJson(options.revision ?? 0)
+    + ';window.__dshDesignerSelectable=' + scriptJson(options.selectable !== false)
     + ';window.__dshDesignerInspect="client";<\/script>'
   return '<!doctype html><html data-dsh-inspect="' + inspect + '">'
     + '<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -189,9 +192,29 @@ export async function apply(ctx) {
    * flight cannot re-arm the binding behind the user's back.
    */
   const inspectModes = new Map()
+  const inspectTokens = new Map()
+  const selectionClients = new Map()
 
   function inspectArmed(sessionId) {
     return inspectModes.get(sessionId) !== false
+  }
+
+  function inspectState(sessionId) {
+    if (!inspectTokens.has(sessionId)) inspectTokens.set(sessionId, randomUUID())
+    return { inspect: inspectArmed(sessionId), token: inspectTokens.get(sessionId) }
+  }
+
+  /** A late click or clear from the same panel must not undo a newer action. */
+  function acceptSelectionAction(sessionId, body) {
+    if (body.client === undefined && body.sequence === undefined) return true
+    if (typeof body.client !== 'string' || !body.client || body.client.length > 128
+      || !Number.isSafeInteger(body.sequence) || body.sequence < 1) throw new Error('Invalid panel action identity')
+    let clients = selectionClients.get(sessionId)
+    if (!clients) { clients = new Map(); selectionClients.set(sessionId, clients) }
+    if (body.sequence <= (clients.get(body.client) ?? 0)) return false
+    clients.set(body.client, body.sequence)
+    if (clients.size > 64) clients.delete(clients.keys().next().value)
+    return true
   }
 
   /** Reduce a display name to a safe file stem; never empty. */
@@ -281,12 +304,13 @@ export async function apply(ctx) {
     // is expected to fetch it — so an unqualified "change this" begins with a
     // design_selection call instead of an edit based on a guess.
     const where = JSON.stringify({
-      branch: pick.name, tag: pick.tag, id: pick.id, selector: pick.selector, selectionId: pick.token,
+      branch: pick.name, revision: pick.revision, tag: pick.tag, id: pick.id, selector: pick.selector, selectionId: pick.token,
     })
     return 'Designer: the user just clicked an element in the Design preview '
       + `(${where}). Before changing anything for a request like "change this" / `
       + '"把这个改一下", call design_selection and act on the element it returns. If it reports no selection, '
-      + 'treat the request as a fresh instruction rather than an edit.'
+      + 'treat the request as a fresh instruction rather than an edit. When it names a historical revision, '
+      + 'read that revision with design_read before creating a new revision; do not assume it is the latest HTML.'
   }
 
   /** The selection slot of one (session, design) pair. */
@@ -315,6 +339,8 @@ export async function apply(ctx) {
    * session already has designs, otherwise the default slug.
    */
   function defaultSlug(sessionId) {
+    const selected = freshSelection(sessionId)
+    if (selected && peek(sessionId, selected.name)) return selected.name
     const all = designsOf(sessionId)
     return all.length > 0 ? all[0].name : DEFAULT_SLUG
   }
@@ -378,6 +404,8 @@ export async function apply(ctx) {
     designs.clear()
     selections.clear()
     inspectModes.clear()
+    inspectTokens.clear()
+    selectionClients.clear()
     loaded.clear()
   }, 'designer: persistent state')
 
@@ -406,6 +434,12 @@ export async function apply(ctx) {
     if (loaded.get(sessionId) === identity) return header
     return withSession(sessionId, async () => {
       if (loaded.get(sessionId) === identity) return header
+      if (loaded.has(sessionId)) {
+        dropSelections(sessionId)
+        inspectModes.delete(sessionId)
+        inspectTokens.delete(sessionId)
+        selectionClients.delete(sessionId)
+      }
       const row = table.get(sessionId)
       if (row && row.createdAt === header.createdAt && row.cwd === (header.cwd ?? '')) {
         designs.set(sessionId, new Map(row.designs.map(entry => [entry.slug, entry])))
@@ -413,6 +447,9 @@ export async function apply(ctx) {
         // A reused session id belongs to a different lifecycle.
         designs.delete(sessionId)
         dropSelections(sessionId)
+        inspectModes.delete(sessionId)
+        inspectTokens.delete(sessionId)
+        selectionClients.delete(sessionId)
       } else if (header.cwd && !designs.has(sessionId)) {
         const folder = `${header.cwd.replace(/\/+$/, '')}/.dsh-design/${createHash('sha256').update(sessionId).digest('hex')}`
         let files
@@ -428,10 +465,15 @@ export async function apply(ctx) {
           const slug = slugOf(file.name.slice(0, -5))
           if (file.name !== slug + '.html') continue
           if (imported.length >= MAX_BRANCHES) throw new Error(`Too many legacy designs (limit ${MAX_BRANCHES})`)
-          const bytes = await ctx.fs.readBytes(file.target, signal, MAX_HTML * 4)
-          const html = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-          if (html.length > MAX_HTML) throw new Error(`Legacy design "${slug}" exceeds ${MAX_HTML} characters`)
-          imported.push({ slug, html, version: 1, updatedAt: Date.now(), revisions: [], lastNote: 'Imported from 0.4' })
+          try {
+            const bytes = await ctx.fs.readBytes(file.target, signal, MAX_HTML * 4)
+            const html = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+            if (html.length > MAX_HTML) throw new Error(`exceeds ${MAX_HTML} characters`)
+            imported.push({ slug, html, version: 1, updatedAt: Date.now(), revisions: [], lastNote: 'Imported from 0.4' })
+          } catch (error) {
+            if (signal?.aborted) throw error
+            throw new Error(`Cannot import legacy design "${file.name}": ${error.message}`, { cause: error })
+          }
         }
         if (imported.length) {
           const next = designerDomain.tables.sessions.valueSchema.parse({
@@ -498,18 +540,25 @@ export async function apply(ctx) {
       const slug = slugOf(url.searchParams.get('name'))
       const entry = peek(sessionId, slug)
       const asked = Number(url.searchParams.get('rev') ?? 0)
+      if (!Number.isSafeInteger(asked) || asked < 0) {
+        sendJson(res, 400, { ok: false, message: 'Invalid revision number.' })
+        return
+      }
       const html = asked > 0 && asked !== entry?.version
         ? revisionHtml(sessionId, slug, asked)
         : entry?.html
-      res.writeHead(200, {
+      res.writeHead(html === undefined && entry ? 404 : 200, {
         'content-type': 'text/html; charset=utf-8',
         'cache-control': 'no-store',
         // Protect direct navigation to this URL as well as iframe embedding.
         'content-security-policy': 'sandbox allow-scripts',
       })
-      res.end(composeDocument(html === undefined ? '' : html, {
+      res.end(composeDocument(html === undefined && entry
+        ? '<p style="font:14px/1.7 system-ui;padding:24px;color:#6b7280">这个历史修订已不再保留，请切换到最新修订。</p>' : html, {
         session: sessionId,
         slug,
+        revision: asked || entry?.version || 0,
+        selectable: html !== undefined,
         // A document built while 点选 is off boots disarmed, so a branch switch
         // cannot hand the user a preview that captures clicks again.
         inspect: inspectArmed(sessionId) && url.searchParams.get('inspect') !== '0',
@@ -578,25 +627,36 @@ export async function apply(ctx) {
       await ensureSession(sessionId)
       const slug = slugOf(url.searchParams.get('name'))
       const entry = peek(sessionId, slug)
+      const selected = freshSelection(sessionId, slug)
       sendJson(res, 200, {
         name: slug,
         version: entry === undefined ? 0 : entry.version,
         bytes: entry === undefined ? 0 : entry.html.length,
-        hasSelection: freshSelection(sessionId, slug) !== undefined,
+        hasSelection: selected !== undefined,
+        delivered: selected?.consumedAt !== undefined,
       })
     },
   }), 'designer: meta route')
 
   /**
    * The 点选 switch, as seen by the Host. The panel calls this whenever the
-   * toggle moves — and once on mount, so a page reload with 点选 already off
-   * re-gates a Host that would otherwise still be armed.
+   * toggle moves. GET on mount adopts the existing mode without changing it.
    * POST { session, on }
    */
   ctx.effect(() => ctx.webServer.register({
     kind: 'exact',
     path: '/designer/inspect',
     handler: async (req, res) => {
+      if (req.method === 'GET') {
+        const sessionId = new URL(req.url, 'http://localhost').searchParams.get('session') ?? 'anonymous'
+        await ensureSession(sessionId)
+        const selected = freshSelection(sessionId)
+        sendJson(res, 200, { ok: true, ...inspectState(sessionId),
+          selection: selected ? { name: selected.name, revision: selected.revision, tag: selected.tag,
+            id: selected.id, classes: selected.classes, text: selected.text, selector: selected.selector,
+            outerHTML: selected.outerHTML, rect: selected.rect, delivered: selected.consumedAt !== undefined } : null })
+        return
+      }
       if (req.method !== 'POST') {
         sendJson(res, 405, { ok: false })
         return
@@ -605,13 +665,18 @@ export async function apply(ctx) {
       try {
         const body = JSON.parse(await readBody(req))
         const sessionId = String(body.session ?? 'anonymous')
-        await sessionHeader(sessionId)
+        await ensureSession(sessionId)
+        if (!acceptSelectionAction(sessionId, body)) {
+          sendJson(res, 200, { ok: true, ignored: 'stale-request', ...inspectState(sessionId) })
+          return
+        }
         const on = body.on !== false
+        if (on !== inspectArmed(sessionId)) inspectTokens.set(sessionId, randomUUID())
         inspectModes.set(sessionId, on)
         // Switching off unbinds: everything clicked before this moment stops
         // being something the model can be told about.
         const dropped = on ? 0 : dropSelections(sessionId)
-        sendJson(res, 200, { ok: true, inspect: on, dropped })
+        sendJson(res, 200, { ok: true, ...inspectState(sessionId), dropped })
       } catch (error) {
         sendJson(res, 400, { ok: false, message: error instanceof Error ? error.message : String(error) })
       }
@@ -630,8 +695,12 @@ export async function apply(ctx) {
       try {
         const body = JSON.parse(await readBody(req))
         const sessionId = String(body.session ?? 'anonymous')
-        await sessionHeader(sessionId)
+        await ensureSession(sessionId)
         const slug = slugOf(body.name)
+        if (!acceptSelectionAction(sessionId, body)) {
+          sendJson(res, 200, { ok: true, ignored: 'stale-request' })
+          return
+        }
         // "Clear" must reach the Host too: the injected runtime context reads
         // this store, so a UI-only clear would keep feeding the model an element
         // the user already dismissed. It drops the whole session, because the
@@ -648,6 +717,15 @@ export async function apply(ctx) {
           sendJson(res, 200, { ok: true, ignored: 'inspect-off' })
           return
         }
+        if (body.inspectToken !== undefined && body.inspectToken !== inspectState(sessionId).token) {
+          sendJson(res, 200, { ok: true, ignored: 'inspect-changed' })
+          return
+        }
+        if (body.revision !== undefined && (!Number.isSafeInteger(body.revision) || body.revision < 1
+          || (body.historical === true ? revisionHtml(sessionId, slug, body.revision) === undefined : peek(sessionId, slug)?.version !== body.revision))) {
+          sendJson(res, 200, { ok: true, ignored: 'preview-changed' })
+          return
+        }
         const selection = body.selection ?? {}
         selections.set(selectionKey(sessionId, slug), {
           token: randomUUID(),
@@ -661,6 +739,7 @@ export async function apply(ctx) {
           rect: String(selection.rect ?? '').slice(0, 100),
           name: slug,
           session: sessionId,
+          ...(body.revision !== undefined ? { revision: body.revision } : {}),
           at: Date.now(),
         })
         sendJson(res, 200, { ok: true })
@@ -784,7 +863,7 @@ export async function apply(ctx) {
         }
         entry.html = html
         entry.version += 1
-        entry.updatedAt = Date.now()
+        entry.updatedAt = Math.max(Date.now(), ...designsOf(sessionId).map(item => item.updatedAt + 1))
         entry.lastNote = typeof args.note === 'string' ? args.note.slice(0, 2000) : ''
 
         let row
@@ -801,6 +880,9 @@ export async function apply(ctx) {
             message: `design_apply: could not save; the previous draft is unchanged. ${error.message}` }
         }
         designs.set(sessionId, new Map(row.designs.map(item => [item.slug, item])))
+        for (const [key, pick] of selections) {
+          if (pick.session === sessionId && pick.name === entry.slug) selections.delete(key)
+        }
         const stored = await exportDesign(entry, header.cwd, sessionId, exec)
         const where = stored.exported
           ? ` Exported to ${stored.path}.`
@@ -851,6 +933,8 @@ export async function apply(ctx) {
           bytes: { type: 'number' },
           count: { type: 'number' },
           hasSelection: { type: 'boolean' },
+          found: { type: 'boolean' },
+          message: { type: 'string' },
           html: { type: 'string' },
         },
         required: ['name', 'version', 'bytes', 'count', 'hasSelection'],
@@ -861,6 +945,7 @@ export async function apply(ctx) {
           `Designer: "${value.name}" version ${value.version}, ${value.bytes} characters.`
             + (value.hasSelection ? ' The user has selected an element in the preview.' : ''),
           value.html ?? '',
+          value.message ?? '',
         ].filter(Boolean).join('\n\n'),
       }],
     },
@@ -874,17 +959,24 @@ export async function apply(ctx) {
       const entry = peek(sessionId, slug)
       const wantHtml = args.html !== false
       if (entry === undefined) {
-        return { name: slug, version: 0, bytes: 0, count: all.length, hasSelection: false }
+        return { name: slug, version: 0, bytes: 0, count: all.length, hasSelection: false, found: false,
+          message: `Design "${slug}" does not exist in this session.` }
+      }
+      if (args.revision !== undefined && (!Number.isSafeInteger(args.revision) || args.revision < 1)) {
+        return { name: slug, version: entry.version, bytes: 0, count: all.length, hasSelection: false, found: false,
+          message: 'revision must be a positive integer.' }
       }
       const wanted = typeof args.revision === 'number' ? args.revision : entry.version
       const html = wanted === entry.version ? entry.html : revisionHtml(sessionId, slug, wanted)
       if (html === undefined) {
         return {
           name: entry.slug,
-          version: entry.version,
+          version: wanted,
           bytes: 0,
           count: all.length,
           hasSelection: false,
+          found: false,
+          message: `Revision ${wanted} is not retained. Call design_list for the available revisions.`,
         }
       }
       return {
@@ -893,7 +985,8 @@ export async function apply(ctx) {
         bytes: html.length,
         count: all.length,
         hasSelection: freshSelection(sessionId, entry.slug) !== undefined,
-        ...(wantHtml && html !== '' ? { html } : {}),
+        found: true,
+        ...(wantHtml ? { html } : {}),
       }
     },
   }
@@ -925,13 +1018,14 @@ export async function apply(ctx) {
           selector: { type: 'string' },
           outerHTML: { type: 'string' },
           rect: { type: 'string' },
+          revision: { type: 'number' },
         },
         required: ['hasSelection'],
       },
       render: (_args, value) => [{
         type: 'text',
         text: value.hasSelection
-          ? `Designer selection${value.design ? ` in "${value.design}"` : ''}: <${value.tag}>${value.id ? `#${value.id}` : ''}\n`
+          ? `Designer selection${value.design ? ` in "${value.design}"` : ''}${value.revision ? ` at revision ${value.revision}` : ''}: <${value.tag}>${value.id ? `#${value.id}` : ''}\n`
             + `selector: ${value.selector}\nrect: ${value.rect}\ntext: ${value.text}\n\n${value.outerHTML}`
           : 'Designer: the user has not clicked any element in the preview yet.',
       }],

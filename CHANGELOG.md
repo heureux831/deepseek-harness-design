@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.3 — State transitions and boundary handling
+
+- Retry failed document and revision loads, check HTTP status, and distinguish loading errors from an empty session.
+- Ignore late responses after switching sessions, alternatives, revisions, or selected elements.
+- Reset historical revisions when switching alternatives; fall back to the latest revision when old history is evicted. Wait for both chains before selecting comparison revisions.
+- Apply actual 390 / 834 / 1280 px viewport widths in single and comparison views, with horizontal scrolling in narrow sidebars.
+- Preserve the Host's inspect mode when reopening Design and restore retained selection receipts, including historical revision context. Switching inspect mode preserves prototype state.
+- Report and retry inspect / clear synchronization failures. Reject stale selection actions and clicks from an outdated preview or inspect mode.
+- Reconcile expired and delivered selections, clear bindings on preview changes and successful edits, and direct unnamed edits to the selected alternative.
+- Treat intentionally empty HTML as a saved document; return explicit missing-revision results. Resolve timestamp ties for deterministic default alternatives.
+- Identify invalid legacy import files and retain atomic import behavior. Add real React lifecycle tests and regression coverage for history, branch, and HTML limits.
+
 ## 0.5.2 — Design welcome guide
 
 - Replace the empty Design panel with a step-by-step usage guide and example prompts.

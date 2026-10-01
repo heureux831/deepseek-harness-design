@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-design",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "type": "module",
   "description": "Live HTML prototyping, element selection, and revision comparison for DeepSeek Harness",
   "files": [
@@ -65,5 +65,10 @@
     "prototype",
     "html"
   ],
-  "author": "heureux831"
+  "author": "heureux831",
+  "devDependencies": {
+    "jsdom": "^27.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  }
 }

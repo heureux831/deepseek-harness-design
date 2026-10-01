@@ -4,7 +4,7 @@ Bug reports, documentation improvements, and pull requests are welcome. This is 
 
 ## Set up
 
-Use Node.js 22 or later:
+Use Node.js 22.12 or later in the 22.x series, or Node.js 24 or later (required by the development test dependencies):
 
 ```sh
 npm ci
@@ -21,7 +21,7 @@ npm run check
 | `client.js` | Design sidebar, iframe preview, and selection handling. |
 | `cordis.patch.yml` | Host plugin registration in the Harness bundle. |
 | `locale/` | Plugin Manager descriptions. |
-| `tests/` | Host regression tests with controlled service mocks. |
+| `tests/` | Host service tests and real React lifecycle tests in JSDOM, with controlled network responses. |
 | `e2e/` | Browser tests, test-only seed plugin, and native Harness storage / sandbox tests. |
 
 ## Make a change
@@ -47,7 +47,7 @@ This creates a new `dist/rN` snapshot and a standard npm tarball. Install that t
 
 For a release, update `package.json`, `package-lock.json`, the changelog, and versioned examples in both README files and E2E documentation. Keep `deepseek-harness-design` as the package name; keep the `designer` storage domain and `.dsh-design` export path stable.
 
-The GitHub CI runs Host tests, syntax checks, and packaging on Node.js 22 and 24. It does not run macOS browser tests or publish to npm. The maintainer may publish a verified tarball with `npm publish <tarball>` after confirming registry ownership and the release version. Never put registry credentials in the repository.
+The GitHub CI runs Host and React tests, syntax checks, and packaging on Node.js 22 and 24. It does not run macOS browser tests or publish to npm. The maintainer may publish a verified tarball with `npm publish <tarball>` after confirming registry ownership and the release version. Never put registry credentials in the repository.
 
 ## License
 

@@ -334,6 +334,23 @@ test('preview reads and rejected edits do not invent alternatives', async t => {
   await assert.rejects(h.request('/designer/live?session=unknown'), /session not found/)
 })
 
+test('an invalid legacy import fails atomically and can recover after the source is corrected', async t => {
+  const h = await harness(t)
+  const a = h.agent('legacy-invalid')
+  const folder = join(a.session.header.cwd, '.dsh-design', createHash('sha256').update(a.id).digest('hex'))
+  await mkdir(folder, { recursive: true })
+  await writeFile(join(folder, 'alpha.html'), '<p>valid</p>')
+  await writeFile(join(folder, 'beta.html'), Buffer.from([0xff, 0xfe]))
+  const result = await write(h, a, { html: '<p>new</p>' })
+  assert.equal(result.ok, false)
+  assert.match(result.message, /cannot restore session/)
+  assert.equal(h.writes.length, 0)
+  assert.equal(await readFile(join(folder, 'alpha.html'), 'utf8'), '<p>valid</p>')
+  await writeFile(join(folder, 'beta.html'), '<p>corrected</p>')
+  assert.equal((await read(h, a, { name: 'alpha' })).html, '<p>valid</p>')
+  assert.equal((await read(h, a, { name: 'beta' })).html, '<p>corrected</p>')
+})
+
 test('reused session IDs do not expose a previous lifecycle draft', async t => {
   const h = await harness(t)
   await write(h, h.agent('a', '', 1), { html: '<p>old lifecycle</p>' })
@@ -353,4 +370,112 @@ test('opaque previews and simple cross-origin bodies cannot mutate panel state',
     assert.equal(h.tools.get('design_selection').execute({}, exec(a)).hasSelection, true)
     assert.equal((await h.request('/designer/select', { session: 'a', clear: true }, 'POST', headers)).status, 415)
   }
+})
+
+test('out-of-order panel clicks and clears cannot replace a newer action', async t => {
+  const h = await harness(t)
+  const a = h.agent('a')
+  const send = (sequence, id) => h.request('/designer/select', { session: 'a', name: 'prototype', client: 'panel-a', sequence,
+    selection: { tag: 'button', id } })
+  await send(2, 'newest')
+  assert.equal((await send(1, 'late')).body.ignored, 'stale-request')
+  assert.equal(h.tools.get('design_selection').execute({}, exec(a)).id, 'newest')
+  await h.request('/designer/select', { session: 'a', clear: true, client: 'panel-a', sequence: 4 })
+  assert.equal((await send(3, 'late-after-clear')).body.ignored, 'stale-request')
+  assert.equal(h.tools.get('design_selection').execute({}, exec(a)).hasSelection, false)
+})
+
+test('an off-on cycle rejects clicks captured before the inspect token changed', async t => {
+  const h = await harness(t)
+  const a = h.agent('a')
+  const before = (await h.request('/designer/inspect?session=a')).body
+  await inspect(h, 'a', false)
+  const after = (await inspect(h, 'a', true)).body
+  assert.notEqual(after.token, before.token)
+  const stale = await h.request('/designer/select', { session: 'a', inspectToken: before.token, selection: { tag: 'button' } })
+  assert.equal(stale.body.ignored, 'inspect-changed')
+  assert.equal(h.tools.get('design_selection').execute({}, exec(a)).hasSelection, false)
+})
+
+test('historical selection names its revision and unnamed edits target the selected alternative', async t => {
+  const h = await harness(t)
+  const a = h.agent('a')
+  await write(h, a, { name: 'alpha', html: '<button>old</button>' })
+  await write(h, a, { name: 'alpha', html: '<button>new</button>' })
+  await write(h, a, { name: 'beta', html: '<aside>other</aside>' })
+  const stale = await h.request('/designer/select', { session: 'a', name: 'alpha', revision: 1,
+    selection: { tag: 'button' } })
+  assert.equal(stale.body.ignored, 'preview-changed', 'a formerly current preview must not pretend to be current')
+  const picked = await h.request('/designer/select', { session: 'a', name: 'alpha', revision: 1, historical: true,
+    selection: { tag: 'button', id: 'old' } })
+  assert.equal(picked.body.ok, true)
+  assert.equal(h.tools.get('design_selection').execute({}, exec(a)).revision, 1)
+  const reopened = (await h.request('/designer/inspect?session=a')).body
+  assert.equal(reopened.selection.name, 'alpha')
+  assert.equal(reopened.selection.revision, 1)
+  assert.equal(reopened.selection.delivered, false)
+  assert.match(h.prompt('a'), /"revision":1/)
+  assert.equal((await read(h, a)).name, 'alpha')
+  const updated = await write(h, a, { html: '<button>updated alpha</button>' })
+  assert.equal(updated.name, 'alpha')
+  assert.equal(h.tools.get('design_selection').execute({}, exec(a)).hasSelection, false)
+  assert.equal((await read(h, a, { name: 'beta' })).html, '<aside>other</aside>')
+})
+
+test('an intentionally empty document stays blank and missing revisions report their absence', async t => {
+  const h = await harness(t)
+  const a = h.agent('a')
+  await write(h, a, { html: '' })
+  const page = await h.request('/designer/live?session=a&name=prototype')
+  assert.equal(page.body.includes('还没有画布'), false)
+  const blank = await read(h, a)
+  assert.equal(blank.found, true)
+  assert.equal(blank.html, '')
+  assert.equal((await h.request('/designer/live?session=a&name=prototype&rev=-1')).status, 400)
+  assert.equal((await h.request('/designer/live?session=a&name=prototype&rev=1.5')).status, 400)
+  const missing = await h.request('/designer/live?session=a&name=prototype&rev=99')
+  assert.equal(missing.status, 404)
+  assert.match(missing.body, /不再保留/)
+  assert.match(missing.body, /__dshDesignerSelectable=false/)
+  const value = await read(h, a, { revision: 99 })
+  assert.equal(value.found, false)
+  assert.equal(value.version, 99)
+  assert.match(value.message, /not retained/)
+})
+
+test('the newest unnamed edit remains deterministic when the clock has millisecond ties', async t => {
+  const h = await harness(t)
+  const a = h.agent('a')
+  t.mock.method(Date, 'now', () => 1000)
+  await write(h, a, { name: 'alpha', html: 'A' })
+  await write(h, a, { name: 'beta', html: 'B' })
+  await write(h, a, { name: 'alpha', html: 'A2' })
+  assert.equal((await read(h, a)).name, 'alpha')
+})
+
+test('a rejected persistence write retains the selection and a reused session clears inspect state', async t => {
+  const h = await harness(t)
+  const a = h.agent('a')
+  await write(h, a, { html: '<button>buy</button>' })
+  await select(h, 'a')
+  h.faults.persistence = true
+  assert.equal((await write(h, a, { html: 'failed' })).ok, false)
+  assert.equal(h.tools.get('design_selection').execute({}, exec(a)).hasSelection, true)
+  await inspect(h, 'a', false)
+  h.agent('a', '', 2)
+  const state = await h.request('/designer/inspect?session=a')
+  assert.equal(state.body.inspect, true)
+})
+
+test('revision history and branch limits remain enforced at their boundaries', async t => {
+  const h = await harness(t)
+  const a = h.agent('a', '')
+  for (let version = 1; version <= 43; version++) await write(h, a, { name: 'alpha', html: 'revision '+version })
+  assert.equal((await read(h, a, { name: 'alpha', revision: 1 })).found, false)
+  assert.equal((await read(h, a, { name: 'alpha', revision: 3 })).html, 'revision 3')
+  for (let index = 1; index <= 31; index++) assert.equal((await write(h, a, { asNew: true, name: 'branch-'+index, html: 'B' })).ok, true)
+  assert.equal((await write(h, a, { asNew: true, name: 'overflow', html: 'B' })).ok, false)
+  assert.equal((await write(h, a, { name: 'alpha', html: 'allowed edit' })).ok, true)
+  assert.equal((await write(h, a, { name: 'alpha', html: 'x'.repeat(400001) })).ok, false)
+  assert.equal((await read(h, a, { name: 'alpha' })).html, 'allowed edit')
 })

@@ -42,9 +42,10 @@ async function main() {
     for (let attempt = 0; attempt < 20; attempt++) {
       // The opaque-origin sandbox is an out-of-process iframe in Chrome, so it
       // has its own CDP target rather than a context in the page target.
+      // Target enumeration has no DOM order; match the selected pane's URL.
+      const src = await ev(`document.querySelectorAll('.dsg-frame')[${index}]?.src`)
       const targets = await httpJson(Number(process.env.DSG_E2E_CDP || 19500), '/json/list')
-      const frame = targets.filter((item) => item.type === 'iframe'
-        && item.url.includes('/designer/live') && item.url.includes('session=' + encodeURIComponent(sid)))[index]
+      const frame = targets.find((item) => item.type === 'iframe' && item.url === src)
       if (frame?.webSocketDebuggerUrl) {
         try {
           const ws = await CDP.connect(frame.webSocketDebuggerUrl)
@@ -163,6 +164,15 @@ async function main() {
   const onA = { p: await frameEv("document.querySelector('p')?.textContent"), src: await ev("document.querySelector('.dsg-frame')?.getAttribute('src')") }
   check('07b 切到方案 a 显示其最新修订', onA && onA.p === '第三版', JSON.stringify(onA))
 
+  for (const [label, width] of [['手机', 390], ['平板', 834], ['桌面', 1280]]) {
+    await clickBy(`function(b){return b.textContent.trim()==='${label}'}`)
+    await wait(350)
+    const actual = await frameEv('window.innerWidth')
+    check('07c ' + label + '使用实际视口宽度', actual === width, 'width=' + actual)
+  }
+  await clickBy("function(b){return b.textContent.trim()==='自适应'}")
+  await wait(350)
+
   const revCaps = await ev("(function(){return [...document.querySelectorAll('.dsg-ver')].map(function(b){return b.textContent.trim()}).filter(function(t){return /^r\\d+$/.test(t)})})()")
   check('06 修订链出现（r3/r2/r1）', Array.isArray(revCaps) && revCaps.length >= 3, JSON.stringify(revCaps))
 
@@ -184,6 +194,12 @@ async function main() {
   await wait(2000)
   const staggered = await ev("(function(){var sides=[...document.querySelectorAll('.dsg-side')]; return sides.map(function(s){var on=[...s.querySelectorAll('.dsg-ver')].filter(function(b){return b.getAttribute('data-on')==='1'}).map(function(b){return b.textContent.trim()}); return on.join('+')})})()")
   check('10b 对比两侧自动错开（不自己比自己）', Array.isArray(staggered) && staggered.length === 2 && staggered[0] !== staggered[1], JSON.stringify(staggered))
+  await clickBy("function(b){return b.textContent.trim()==='平板'}")
+  await wait(350)
+  const compareWidths = [await frameEv('window.innerWidth', 0), await frameEv('window.innerWidth', 1)]
+  check('10c 对比两侧都使用所选视口宽度', compareWidths.every(width => width === 834), JSON.stringify(compareWidths))
+  await clickBy("function(b){return b.textContent.trim()==='自适应'}")
+  await wait(350)
   await shot('31-compare')
 
   // Click inside the left preview and confirm the host records the selection.
@@ -198,10 +214,12 @@ async function main() {
 
   // Regression: turning inspect OFF, then switching branch, used to come back ON
   // because the rebuilt iframe booted with the document default.
+  await frameEv("window.__designPreservedState='keep'")
   await ev("(function(){var b=[...document.querySelectorAll('.dsg-btn')].find(function(x){return x.textContent.trim()==='点选'}); if(b&&b.getAttribute('data-on')==='1')b.click(); return true})()")
   await wait(900)
   const offState = { btn: await ev("[...document.querySelectorAll('.dsg-btn')].find(x=>x.textContent.trim()==='点选')?.getAttribute('data-on')"), doc: await inspectMode() }
   check('16a 关闭点选立即生效', offState && offState.btn === '0' && offState.doc === 'off', JSON.stringify(offState))
+  check('16c 点选开关保留原型交互状态', await frameEv('window.__designPreservedState') === 'keep')
 
   // 点选 is the BINDING switch, not a click filter: switching it off must unbind
   // what was clicked while it was on, and keep a click that is still travelling
@@ -285,6 +303,14 @@ async function main() {
   const firstClick = JSON.stringify({session:sid,name:p3,selection:{tag:'button',id:'session-a-after-b-off'}})
   const response = await ev("fetch('/designer/select',{method:'POST',headers:{'content-type':'application/json'},body:" + JSON.stringify(firstClick) + "}).then(r=>r.json())")
   check('21 会话 B 关闭点选不影响会话 A', !!response && response.ok === true && !response.ignored && await hasSelection(p3) === true, JSON.stringify(response))
+
+  const oneBranch = JSON.stringify({ session: sid, branches: [{ name: 'only', revisions: ['<p>old</p>', '<p>new</p>'] }] })
+  await ev("fetch('/designer/dev/seed',{method:'POST',headers:{'content-type':'application/json'},body:" + JSON.stringify(oneBranch) + "}).then(r=>r.json())")
+  await wait(2200)
+  await clickBy("function(b){return b.textContent.trim()==='对比'}")
+  await wait(2200)
+  const singleComparison = await ev("[...document.querySelectorAll('.dsg-frame')].map(f=>new URL(f.src).searchParams.get('rev'))")
+  check('22 只有一个方案时自动比较当前与历史修订', singleComparison?.length === 2 && singleComparison[0] !== singleComparison[1], JSON.stringify(singleComparison))
 
   const fatal = consoleErrors.filter((e) => e.includes('viewingOld') || e.includes("crashed in 'sidebar.right.pane.tab'")
     || e.includes('DesignBody'))
