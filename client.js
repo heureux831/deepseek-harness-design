@@ -31,6 +31,18 @@ window.__ModuleLoader__.load({
       '.dsg-holder{height:100%;min-height:400px;transition:width .16s ease}',
       '.dsg-frame{border:0;background:#fff;width:100%;height:100%;min-height:400px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.12);display:block}',
       '.dsg-note{font-size:12px;color:var(--dsw-alias-label-tertiary,#888);padding:8px 10px;line-height:18px}',
+      '.dsg-welcome{flex:1;min-height:0;overflow:auto;box-sizing:border-box;padding:28px 20px 24px}',
+      '.dsg-welcome-inner{max-width:520px;margin:0 auto}',
+      '.dsg-welcome-kicker{font-size:10px;line-height:16px;letter-spacing:.12em;color:var(--dsw-alias-label-tertiary,#888)}',
+      '.dsg-welcome h1{font-size:23px;font-weight:600;line-height:1.4;letter-spacing:-.02em;margin:8px 0 10px;overflow-wrap:anywhere}',
+      '.dsg-welcome-intro{font-size:13px;line-height:1.8;color:var(--dsw-alias-label-secondary,#555);margin:0 0 24px}',
+      '.dsg-welcome-steps{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:22px}',
+      '.dsg-welcome-step{display:grid;grid-template-columns:24px minmax(0,1fr);gap:12px}',
+      '.dsg-welcome-num{width:24px;height:24px;display:grid;place-items:center;border-radius:50%;background:var(--dsw-alias-bg-l2,rgba(0,0,0,.05));font-size:11px;color:var(--dsw-alias-label-secondary,#555)}',
+      '.dsg-welcome h2{font-size:13px;font-weight:600;line-height:24px;margin:0 0 4px}',
+      '.dsg-welcome-step p{font-size:12px;line-height:1.8;margin:0;color:var(--dsw-alias-label-secondary,#555)}',
+      '.dsg-welcome-example{font-size:12px;line-height:1.8;margin:10px 0 0;padding:10px 12px;background:var(--dsw-alias-bg-l2,rgba(0,0,0,.04));border-left:2px solid var(--dsw-alias-state-business-primary,#4176e6);border-radius:0 6px 6px 0;overflow-wrap:anywhere}',
+      '.dsg-welcome-tip{margin:24px 0 0;padding-top:16px;border-top:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.08));font-size:12px;line-height:1.8;color:var(--dsw-alias-label-secondary,#555)}',
       '.dsg-sel{flex:none;border-top:1px solid var(--dsw-alias-border-l2,rgba(0,0,0,.08));padding:8px 10px;display:flex;flex-direction:column;gap:6px}',
       '.dsg-row{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dsw-alias-label-secondary,#666);min-width:0}',
       '.dsg-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
@@ -432,10 +444,37 @@ window.__ModuleLoader__.load({
       const holderStyle = { width: width === 0 ? '100%' : width + 'px', maxWidth: '100%' }
 
       let canvas
-      if (sessionId === '') {
-        canvas = h('div', { className: 'dsg-note' }, '这个会话还没有画布。对模型说你想做什么界面即可。')
-      } else if (designs.length === 0) {
-        canvas = h('div', { className: 'dsg-note' }, '正在等待第一版稿子…对模型描述你要的界面即可。')
+      if (sessionId === '' || designs.length === 0) {
+        const steps = [
+          { title: '描述你想要的界面', text: '在左侧对话里告诉模型页面用途、内容和风格。第一版生成后，会自动显示在这里。',
+            example: '在 Design 里做一个咖啡店首页，暖白底色、大幅产品图、简洁导航。' },
+          { title: '点选元素，继续修改', text: '开启工具栏的「点选」，点击预览中的按钮、文字或卡片，再回到对话说要怎么改。',
+            example: '把这个按钮改成描边样式，文字改为「了解更多」。' },
+          { title: '尝试另一个方向', text: '想保留当前稿子，就明确要求一个新方案。切换「方案」看不同方向，切换「修订」回看修改前的版本。',
+            example: '保留这一版，再做一个深色方案。' },
+          { title: '切换尺寸，并排对比', text: '用「手机 / 平板 / 桌面」查看不同宽度。有两个方案或两个修订后，点「对比」并排查看，两侧可分别切换。' },
+        ]
+        canvas = h('main', { className: 'dsg-welcome', 'aria-label': 'Design 使用指南' },
+          h('div', { className: 'dsg-welcome-inner' },
+            h('div', { className: 'dsg-welcome-kicker' }, 'DESIGN · 快速开始'),
+            h('h1', null, '从一句话，开始画界面。'),
+            h('p', { className: 'dsg-welcome-intro' }, sessionId === ''
+              ? '先在左侧打开一个会话，再描述你想做的页面。这里会成为你的实时预览画布。'
+              : '在对话里提出想法，在这里查看效果。继续描述或点选元素，就能一轮轮把界面改到满意。'),
+            h('ol', { className: 'dsg-welcome-steps' }, steps.map(function (step, index) {
+              return h('li', { key: step.title, className: 'dsg-welcome-step' },
+                h('span', { className: 'dsg-welcome-num', 'aria-hidden': 'true' }, index + 1),
+                h('div', null,
+                  h('h2', null, step.title),
+                  h('p', null, step.text),
+                  step.example ? h('blockquote', { className: 'dsg-welcome-example' }, '「' + step.example + '」') : null,
+                ),
+              )
+            })),
+            h('p', { className: 'dsg-welcome-tip' },
+              '想体验页面自己的按钮和交互，先关闭「点选」。稿件会随当前会话保存，下次打开可以接着改。'),
+          ),
+        )
       } else if (compare) {
         const branchOptions = designs.map(function (entry) {
           return { value: entry.name, text: entry.name, title: entry.name + ' · 修订 ' + entry.version }
@@ -526,7 +565,7 @@ window.__ModuleLoader__.load({
           })
         }, singleItems.length < 2)
 
-      const versionBar = compare ? null : h('div', { className: 'dsg-bar dsg-bar-versions' },
+      const versionBar = compare || designs.length === 0 ? null : h('div', { className: 'dsg-bar dsg-bar-versions' },
         h('div', { className: 'dsg-vrows' },
           branchRow,
           revisionRow,
@@ -550,8 +589,8 @@ window.__ModuleLoader__.load({
       )
 
       const toolbar = compare ? null : h('div', { className: 'dsg-bar' },
-        h('span', { className: 'dsg-title', title: (left || 'prototype') },
-          (left || 'prototype')
+        h('span', { className: 'dsg-title', title: designs.length === 0 ? '使用指南' : (left || 'prototype') },
+          (designs.length === 0 ? '使用指南' : (left || 'prototype'))
             + (singleRev.current > 0 ? ' · r' + (viewingOld ? singleRev.shown : singleRev.current) : '')),
         h('span', { className: 'dsg-spacer' }),
         buttons,
@@ -568,7 +607,7 @@ window.__ModuleLoader__.load({
           )
           : null,
         canvas,
-        selection === null
+        designs.length === 0 ? null : selection === null
           ? h('div', { className: 'dsg-note' },
             inspect
               ? '点选已开启：点击预览里的元素，然后对模型说「改这里」。'

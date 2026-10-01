@@ -19,10 +19,10 @@ npm ci
 ./release.sh
 ```
 
-首次构建生成 `dist/r1/deepseek-harness-design-0.5.1.tgz`，后续使用递增的 `rN` 目录。安装脚本输出的本地发布包：
+首次构建生成 `dist/r1/deepseek-harness-design-0.5.2.tgz`，后续使用递增的 `rN` 目录。安装脚本输出的本地发布包：
 
 ```sh
-dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.1.tgz
+dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.2.tgz
 # Desktop 使用 --profile desktop
 ```
 
@@ -32,7 +32,7 @@ dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.1.tgz
 
 ## 使用
 
-1. 展开右侧栏，在 `+` 的 guide 卡片中选择 **Design**。
+1. 展开右侧栏，在 `+` 的 guide 卡片中选择 **Design**。还没有稿件时，面板会显示使用指南和示例提示词。
 2. 对模型描述想要的页面。模型调用 `design_apply` 后，面板约 1 秒内自动刷新。
 3. 开启工具栏的「点选」，点击预览中的目标元素，再对模型说要如何修改。
 4. 关闭「点选」可操作原型自己的按钮和脚本。手机、平板、桌面按钮用于切换视口宽度。
@@ -91,7 +91,7 @@ npm run check
 ./release.sh
 ```
 
-`release.sh` 生成新的 `dist/rN` 目录和标准 `deepseek-harness-design-0.5.1.tgz` 发布包，执行测试、安装运行依赖，并拒绝覆盖已有快照。可用 `DSG_RELEASE_DIR` 指定其他输出目录。包名保持 `deepseek-harness-design`，版本由 `package.json` 管理。`npm pack` 的 `prepack` 同样执行 Host 测试和语法检查。
+`release.sh` 生成新的 `dist/rN` 目录和标准 `deepseek-harness-design-0.5.2.tgz` 发布包，执行测试、安装运行依赖，并拒绝覆盖已有快照。可用 `DSG_RELEASE_DIR` 指定其他输出目录。包名保持 `deepseek-harness-design`，版本由 `package.json` 管理。`npm pack` 的 `prepack` 同样执行 Host 测试和语法检查。
 
 发布包包含 Host、浏览器入口、locale、bundle patch、README 和 MIT 许可；不会包含测试种子插件。公开发布前，可用生成的 tarball 安装到独立 profile 验证，再通过 `npm publish <tarball>` 发布。
 

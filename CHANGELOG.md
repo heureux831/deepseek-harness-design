@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 — Design welcome guide
+
+- Replace the empty Design panel with a step-by-step usage guide and example prompts.
+- Explain element selection, alternatives, revisions, viewport sizes, comparison, and interacting with the prototype.
+- Show the guide before the first draft and replace it with the live preview when a design becomes available.
+
 ## 0.5.1 — Workspace export policy fix
 
 - Pass the owning session's resolved sandbox policy to HTML exports, matching the native fs tool call contract. Version 0.5.0 omitted this argument and used the deployment fallback root, so exports could fail even inside the session workspace.

@@ -33,10 +33,10 @@ npm ci
 ./release.sh
 ```
 
-The first build produces `dist/r1/deepseek-harness-design-0.5.1.tgz`; later builds use the next `rN` directory. Install the printed tarball path:
+The first build produces `dist/r1/deepseek-harness-design-0.5.2.tgz`; later builds use the next `rN` directory. Install the printed tarball path:
 
 ```sh
-dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.1.tgz
+dsh plugin --profile web add ./dist/r1/deepseek-harness-design-0.5.2.tgz
 # For the Desktop profile, use --profile desktop.
 ```
 
@@ -51,7 +51,7 @@ dsh plugin --profile desktop remove dsh-design
 
 ## Use
 
-1. Open the right sidebar and choose **Design** from the `+` guide cards.
+1. Open the right sidebar and choose **Design** from the `+` guide cards. The empty panel shows a quick-start guide with example prompts.
 2. Ask the model to create a page. A successful `design_apply` updates the preview within about a second.
 3. Enable element selection, click an element, and describe the change you want.
 4. Disable selection to use the prototype's own buttons and scripts.

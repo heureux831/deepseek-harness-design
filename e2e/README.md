@@ -7,7 +7,7 @@ Host 的单元回归用 `npm test` 执行。以下检查使用实际安装的 Ha
 先运行 `./release.sh`，把生成的 tarball 传给：
 
 ```sh
-./e2e/run.sh /absolute/path/deepseek-harness-design-0.5.1.tgz
+./e2e/run.sh /absolute/path/deepseek-harness-design-0.5.2.tgz
 ```
 
 脚本需要 macOS 上的 `/Applications/DeepSeek Harness.app` 和 `/Applications/Google Chrome.app`。通过 `DSG_HARNESS_APP` 可调整 Harness app 路径；`DSG_E2E_PORT` 和 `DSG_E2E_CDP` 可调整默认的 19401 / 19501 端口。

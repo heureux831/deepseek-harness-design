@@ -1,6 +1,6 @@
 {
   "name": "deepseek-harness-design",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "type": "module",
   "description": "Live HTML prototyping, element selection, and revision comparison for DeepSeek Harness",
   "files": [

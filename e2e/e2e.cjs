@@ -107,8 +107,19 @@ async function main() {
   await wait(1800)
   await clickBy("function(b){var t=(b.textContent||'').trim(); return t.indexOf('Design')===0 && t.indexOf('实时预览')>=0}", 'design card')
   await wait(2800)
+  // Creating a conversation can reopen the API-key prompt in a fresh profile.
+  await clickBy("function(b){return b.textContent.trim()==='稍后配置'}", 'defer session API key')
+  await wait(300)
 
   check('02 Design 面板挂载（无崩溃）', await ev("!!document.querySelector('.dsg-root')") === true)
+
+  const welcome = await ev("(function(){var g=document.querySelector('.dsg-welcome');return g?{steps:g.querySelectorAll('li').length,prompts:g.querySelectorAll('blockquote').length,text:g.innerText,fits:g.scrollWidth<=g.clientWidth,preview:!!document.querySelector('.dsg-frame')}:null})()")
+  check('02a 首次打开显示使用指南和示例提示词', welcome?.steps === 4 && welcome?.prompts === 3
+    && welcome.text.includes('点选元素') && welcome.text.includes('并排对比'))
+  check('02b 空画布指南适配侧栏宽度', welcome?.fits === true && welcome?.preview === false)
+  await shot('00-welcome')
+  await ev("document.querySelector('.dsg-welcome').scrollTop=document.querySelector('.dsg-welcome').scrollHeight")
+  await shot('01-welcome-bottom')
 
   const sid = await ev("(function(){var m=document.body.innerHTML.match(/session-[0-9a-f-]{36}/); return m?m[0]:null})()")
   check('03 取到会话 ID', typeof sid === 'string' && sid.startsWith('session-'), sid)
@@ -141,6 +152,7 @@ async function main() {
 
   const caps = await ev("(function(){return [...document.querySelectorAll('.dsg-ver')].map(function(b){return b.textContent.trim()})})()")
   check('05 面板自动跟到种子（轮询生效）', Array.isArray(caps) && caps.indexOf('b') >= 0 && caps.indexOf('a') >= 0, JSON.stringify(caps))
+  check('05a 首稿出现后指南自动切换为预览', await ev("!document.querySelector('.dsg-welcome') && !!document.querySelector('.dsg-frame')") === true)
 
   const shownBranch = await ev("(function(){var on=[...document.querySelectorAll('.dsg-ver')].find(function(b){return b.getAttribute('data-on')==='1'}); return on?on.textContent.trim():null})()")
   check('07 默认停在某个方案上', shownBranch === 'a' || shownBranch === 'b', String(shownBranch))
